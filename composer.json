@@ -2,7 +2,7 @@
     "name": "lsr/routing",
     "description": "Laser framework core - Routing.",
     "require-dev": {
-        "phpunit/phpunit": "10.0.x-dev"
+        "phpunit/phpunit": "^9.5"
     },
     "autoload": {
         "psr-4": {
