@@ -7,21 +7,21 @@ namespace Lsr\Core\Routing;
 
 
 use InvalidArgumentException;
-use Lsr\Core\Interfaces\ControllerInterface;
-use Lsr\Core\Interfaces\RequestInterface;
-use Lsr\Core\Request;
-use Lsr\Core\Routing\Interfaces\RouteInterface;
+use Lsr\Core\App;
+use Lsr\Core\Requests\Request;
+use Lsr\Core\Router;
+use Lsr\Enums\RequestMethod;
+use Lsr\Interfaces\ControllerInterface;
+use Lsr\Interfaces\RequestInterface;
+use Lsr\Interfaces\RouteInterface;
 
 class Route implements RouteInterface
 {
 
-
-	/** @var Route[] Structure holding all set routes */
-	public static array $availableRoutes = [];
-	/** @var array<string, Route> Array of named routes with their names as array keys */
-	public static array $namedRoutes = [];
 	/** @var string[] Current URL path as an array (exploded using the "/") */
 	public array $path = [];
+	/** @var string URL in a string format */
+	public string $readablePath = '';
 
 	/** @var callable|array $handler Route callback */
 	protected $handler;
@@ -33,10 +33,10 @@ class Route implements RouteInterface
 	/**
 	 * Route constructor.
 	 *
-	 * @param string         $type
+	 * @param RequestMethod  $type
 	 * @param callable|array $handler
 	 */
-	public function __construct(protected string $type, callable|array $handler) {
+	public function __construct(protected RequestMethod $type, callable|array $handler) {
 		$this->handler = $handler;
 	}
 
@@ -49,46 +49,29 @@ class Route implements RouteInterface
 	 * @return Route
 	 */
 	public static function get(string $pathString, callable|array $handler) : Route {
-		return self::create(self::GET, $pathString, $handler);
+		return self::create(RequestMethod::GET, $pathString, $handler);
 	}
 
 	/**
 	 * Create a new route
 	 *
-	 * @param string         $type       [GET, POST, DELETE, PUT]
+	 * @param RequestMethod  $type       [GET, POST, DELETE, PUT]
 	 * @param string         $pathString Path
 	 * @param callable|array $handler    Callback
 	 *
 	 * @return Route
 	 */
-	public static function create(string $type, string $pathString, callable|array $handler) : Route {
+	public static function create(RequestMethod $type, string $pathString, callable|array $handler) : Route {
 		$route = new self($type, $handler);
 		$route->path = array_filter(explode('/', $pathString), 'not_empty');
-		self::insertIntoAvailableRoutes($route->path, $type, $route);
-		return $route;
-	}
+		$route->readablePath = $pathString;
 
-	/**
-	 * Add a new route into availableRoutes array
-	 *
-	 * @param string[] $path  Route path
-	 * @param string   $type  Route type (GET, POST, DELETE, PUT)
-	 * @param Route    $route Route object
-	 */
-	protected static function insertIntoAvailableRoutes(array $path, string $type, Route $route) : void {
-		$routes = &self::$availableRoutes;
-		foreach ($path as $name) {
-			$name = strtolower($name);
-			if (!isset($routes[$name])) {
-				$routes[$name] = [];
-			}
-			$routes = &$routes[$name];
-		}
-		if (!isset($routes[$type])) {
-			$routes[$type] = [];
-		}
-		$routes = &$routes[$type];
-		$routes[] = $route;
+		// Register route
+		/** @var Router $router */
+		$router = App::getService('routing');
+		$router->register($route);
+
+		return $route;
 	}
 
 	/**
@@ -100,7 +83,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 */
 	public static function post(string $pathString, callable|array $handler) : Route {
-		return self::create(self::POST, $pathString, $handler);
+		return self::create(RequestMethod::POST, $pathString, $handler);
 	}
 
 	/**
@@ -112,7 +95,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 */
 	public static function update(string $pathString, callable|array $handler) : Route {
-		return self::create(self::UPDATE, $pathString, $handler);
+		return self::create(RequestMethod::UPDATE, $pathString, $handler);
 	}
 
 	/**
@@ -124,53 +107,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 */
 	public static function delete(string $pathString, callable|array $handler) : Route {
-		return self::create(self::DELETE, $pathString, $handler);
-	}
-
-	/**
-	 * Get set route if it exists
-	 *
-	 * @param string $type   [GET, POST, DELETE, PUT]
-	 * @param array  $path   URL path as an array
-	 * @param array  $params URL parameters in a key-value array
-	 *
-	 * @return Route|null
-	 */
-	public static function getRoute(string $type, array $path, array &$params = []) : ?Route {
-		$routes = self::$availableRoutes;
-		foreach ($path as $value) {
-			if (isset($routes[$value])) {
-				$routes = $routes[$value];
-				continue;
-			}
-
-			$paramRoutes = array_filter($routes, static function(string $key) {
-				return preg_match('/({[^}]+})/', $key) > 0;
-			},                          ARRAY_FILTER_USE_KEY);
-			if (count($paramRoutes) === 1) {
-				$name = substr(array_keys($paramRoutes)[0], 1, -1);
-				$routes = reset($paramRoutes);
-				$params[$name] = $value;
-				continue;
-			}
-
-			return null;
-		}
-		if (isset($routes[$type]) && count($routes[$type]) !== 0) {
-			return reset($routes[$type]);
-		}
-		return null;
-	}
-
-	/**
-	 * Get named Route object if it exists
-	 *
-	 * @param string $name
-	 *
-	 * @return Route|null
-	 */
-	public static function getRouteByName(string $name) : ?Route {
-		return self::$namedRoutes[$name] ?? null;
+		return self::create(RequestMethod::DELETE, $pathString, $handler);
 	}
 
 	/**
@@ -192,15 +129,15 @@ class Route implements RouteInterface
 			if (class_exists($this->handler[0])) {
 				[$class, $func] = $this->handler;
 				/** @var ControllerInterface $controller */
-				$page = new $class;
+				$controller = App::getContainer()->getByType($class);
 
 				// Class-wide middleware
-				foreach ($page->middleware as $middleware) {
+				foreach ($controller->middleware as $middleware) {
 					$middleware->handle($request);
 				}
 
-				$page->init($request);
-				$page->$func($request);
+				$controller->init($request);
+				$controller->$func($request);
 			}
 		}
 		else {
@@ -226,19 +163,18 @@ class Route implements RouteInterface
 	 * @return $this
 	 */
 	public function name(string $name) : Route {
-		if (isset(self::$namedRoutes[$name]) && self::$namedRoutes[$name] !== $this) {
+		// Test for duplicate names
+		/** @var Router $router */
+		$router = App::getService('routing');
+		$test = $router->getRouteByName($name);
+		if ($test !== null && $test !== $this) {
 			throw new InvalidArgumentException('Route of this name already exists. ('.$name.')');
 		}
-		$this->routeName = $name;
-		self::$namedRoutes[$name] = $this;
-		return $this;
-	}
 
-	/**
-	 * @return string
-	 */
-	public function getRouteName() : string {
-		return $this->routeName;
+		// Register named route
+		$this->routeName = $name;
+		$router->registerNamed($this);
+		return $this;
 	}
 
 	/**
@@ -248,4 +184,32 @@ class Route implements RouteInterface
 		return $this->handler;
 	}
 
+	public function getReadable() : string {
+		return $this->readablePath;
+	}
+
+	/**
+	 * Get split route path
+	 *
+	 * @return string[]
+	 */
+	public function getPath() : array {
+		return $this->path;
+	}
+
+	/**
+	 * Get route's name
+	 *
+	 * @return string Can be empty if no name is set
+	 */
+	public function getName() : string {
+		return $this->routeName;
+	}
+
+	/**
+	 * @return RequestMethod
+	 */
+	public function getMethod() : RequestMethod {
+		return $this->type;
+	}
 }

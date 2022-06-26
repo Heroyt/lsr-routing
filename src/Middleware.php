@@ -6,7 +6,7 @@
 namespace Lsr\Core\Routing;
 
 
-use Lsr\Core\Request;
+use Lsr\Interfaces\RequestInterface;
 
 interface Middleware
 {
@@ -14,10 +14,10 @@ interface Middleware
 	/**
 	 * Handles a request
 	 *
-	 * @param Request $request
+	 * @param RequestInterface $request
 	 *
 	 * @return bool
 	 */
-	public function handle(Request $request) : bool;
+	public function handle(RequestInterface $request) : bool;
 
 }

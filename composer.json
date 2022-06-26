@@ -1,22 +1,29 @@
 {
-    "name": "lsr/routing",
-    "description": "Laser framework core - Routing.",
-    "require-dev": {
-        "phpunit/phpunit": "^9.5"
-    },
-    "autoload": {
-        "psr-4": {
-            "Lsr\\Core\\Routing\\": "src/"
-        }
-    },
-    "authors": [
-        {
+	"name": "lsr/routing",
+	"description": "Laser framework core - Routing.",
+	"repositories": [
+		{
+			"type": "composer",
+			"url": "https://packages.laserliga.cz"
+		}
+	],
+	"require-dev": {
+		"phpunit/phpunit": "^9.5"
+	},
+	"autoload": {
+		"psr-4": {
+			"Lsr\\Core\\Routing\\": "src/"
+		}
+	},
+	"authors": [
+		{
             "name": "Tomáš Vojík",
             "email": "vojik@wboy.cz"
         }
     ],
     "minimum-stability": "dev",
     "require": {
-        "php": ">=8.1"
-    }
+			"php": ">=8.1",
+			"lsr/interfaces": "dev-master"
+		}
 }

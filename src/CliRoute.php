@@ -6,16 +6,17 @@
 namespace Lsr\Core\Routing;
 
 
-use Lsr\Core\Interfaces\ControllerInterface;
-use Lsr\Core\Interfaces\RequestInterface;
-use Lsr\Core\Request;
-use Lsr\Core\Routing\Interfaces\RouteInterface;
+use Lsr\Core\App;
+use Lsr\Core\Requests\Request;
+use Lsr\Core\Router;
+use Lsr\Enums\RequestMethod;
+use Lsr\Interfaces\ControllerInterface;
+use Lsr\Interfaces\RequestInterface;
+use Lsr\Interfaces\RouteInterface;
 
 class CliRoute implements RouteInterface
 {
 
-	/** @var Route[] Structure holding all set routes */
-	public static array $availableRoutes = [];
 	/** @var string[] Current URL path as an array (exploded using the "/") */
 	public array $path = [];
 	/** @var string Route's usage to print */
@@ -32,10 +33,10 @@ class CliRoute implements RouteInterface
 	/**
 	 * Route constructor.
 	 *
-	 * @param string         $type
+	 * @param RequestMethod  $type
 	 * @param callable|array $handler
 	 */
-	public function __construct(protected string $type, callable|array $handler) {
+	public function __construct(protected RequestMethod $type, callable|array $handler) {
 		$this->handler = $handler;
 	}
 
@@ -48,81 +49,28 @@ class CliRoute implements RouteInterface
 	 * @return CliRoute
 	 */
 	public static function cli(string $pathString, callable|array $handler) : CliRoute {
-		return self::create(self::CLI, $pathString, $handler);
+		return self::create(RequestMethod::CLI, $pathString, $handler);
 	}
 
 	/**
 	 * Create a new route
 	 *
-	 * @param string         $type       [GET, POST, DELETE, PUT]
+	 * @param RequestMethod  $type       [GET, POST, DELETE, PUT]
 	 * @param string         $pathString Path
 	 * @param callable|array $handler    Callback
 	 *
 	 * @return CliRoute
 	 */
-	public static function create(string $type, string $pathString, callable|array $handler) : CliRoute {
+	public static function create(RequestMethod $type, string $pathString, callable|array $handler) : CliRoute {
 		$route = new self($type, $handler);
 		$route->path = array_filter(explode('/', $pathString), 'not_empty');
-		self::insertIntoAvailableRoutes($route->path, $type, $route);
+
+		// Register route
+		/** @var Router $router */
+		$router = App::getService('routing');
+		$router->register($route);
+
 		return $route;
-	}
-
-	/**
-	 * Add a new route into availableRoutes array
-	 *
-	 * @param string[] $path  Route path
-	 * @param string   $type  Route type (GET, POST, DELETE, PUT)
-	 * @param CliRoute $route Route object
-	 */
-	protected static function insertIntoAvailableRoutes(array $path, string $type, CliRoute $route) : void {
-		$routes = &self::$availableRoutes;
-		foreach ($path as $name) {
-			$name = strtolower($name);
-			if (!isset($routes[$name])) {
-				$routes[$name] = [];
-			}
-			$routes = &$routes[$name];
-		}
-		if (!isset($routes[$type])) {
-			$routes[$type] = [];
-		}
-		$routes = &$routes[$type];
-		$routes[] = $route;
-	}
-
-	/**
-	 * Get set route if it exists
-	 *
-	 * @param string $type   [GET, POST, DELETE, PUT]
-	 * @param array  $path   URL path as an array
-	 * @param array  $params URL parameters in a key-value array
-	 *
-	 * @return Route|null
-	 */
-	public static function getRoute(string $type, array $path, array &$params = []) : ?CliRoute {
-		$routes = self::$availableRoutes;
-		foreach ($path as $value) {
-			if (isset($routes[$value])) {
-				$routes = $routes[$value];
-				continue;
-			}
-
-			$paramRoutes = array_filter($routes, static function(string $key) {
-				return preg_match('/({[^}]+})/', $key) > 0;
-			},                          ARRAY_FILTER_USE_KEY);
-			if (count($paramRoutes) === 1) {
-				$name = substr(array_keys($paramRoutes)[0], 1, -1);
-				$routes = reset($paramRoutes);
-				$params[$name] = $value;
-				continue;
-			}
-
-			return null;
-		}
-		if (isset($routes[$type]) && count($routes[$type]) !== 0) {
-			return reset($routes[$type]);
-		}
-		return null;
 	}
 
 	/**
@@ -135,7 +83,7 @@ class CliRoute implements RouteInterface
 			if (class_exists($this->handler[0])) {
 				[$class, $func] = $this->handler;
 				/** @var ControllerInterface $controller */
-				$controller = new $class;
+				$controller = App::getContainer()->getByType($class);
 
 				$controller->init($request);
 				$controller->$func($request);
@@ -196,4 +144,34 @@ class CliRoute implements RouteInterface
 		return $this;
 	}
 
+	public function getReadable() : string {
+		return empty($this->usage) ? implode('/', $this->path) : $this->usage;
+	}
+
+	/**
+	 * Get split route path
+	 *
+	 * @return string[]
+	 */
+	public function getPath() : array {
+		return $this->path;
+	}
+
+	/**
+	 * Get route's name
+	 *
+	 * @return string Can be empty if no name is set
+	 */
+	public function getName() : string {
+		return '';
+	}
+
+	/**
+	 * Get route's request method
+	 *
+	 * @return RequestMethod
+	 */
+	public function getMethod() : RequestMethod {
+		return $this->type;
+	}
 }
