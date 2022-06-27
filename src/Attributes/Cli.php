@@ -10,10 +10,10 @@ class Cli extends Route
 {
 
 	public function __construct(
-		public readonly string $path = '',
-		public readonly string $usage = '',
-		public readonly string $description = '',
-		public readonly array  $arguments = [],
+		public string $path,
+		public string $usage = '',
+		public string $description = '',
+		public array  $arguments = [],
 	) {
 		parent::__construct(RequestMethod::CLI, $path);
 	}

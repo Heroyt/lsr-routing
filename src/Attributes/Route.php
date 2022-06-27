@@ -10,9 +10,9 @@ class Route
 {
 
 	public function __construct(
-		public readonly RequestMethod $method = RequestMethod::GET,
-		public readonly string        $path = '',
-		public readonly string        $name = '',
+		public RequestMethod $method = RequestMethod::GET,
+		public string        $path = '',
+		public string        $name = '',
 	) {
 		match (true) {
 			empty($this->path) => throw new \InvalidArgumentException('Missing required argument - path'),
