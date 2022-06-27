@@ -98,9 +98,18 @@ class Router
 	 * Route loading implements cache for faster load times. Cache will expire after 1 day or
 	 * when any of the route config files changes.
 	 *
+	 * @throws ReflectionException
 	 * @see Route
 	 */
 	public function setup() : void {
+		// Do not cache CLI requests
+		if (PHP_SAPI === 'cli') {
+			$dep = [];
+			$this->loadRoutes($dep);
+			return;
+		}
+
+		// Cache normal requests
 		try {
 			[self::$availableRoutes, self::$namedRoutes] = $this->cache->load('routes', [$this, 'loadRoutes']);
 		} catch (Throwable $e) {
