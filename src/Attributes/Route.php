@@ -14,9 +14,9 @@ class Route
 		public string        $path = '',
 		public string        $name = '',
 	) {
-		match (true) {
-			empty($this->path) => throw new \InvalidArgumentException('Missing required argument - path'),
-		};
+		if (empty($this->path)) {
+			throw new \InvalidArgumentException('Missing required argument - path');
+		}
 	}
 
 }
