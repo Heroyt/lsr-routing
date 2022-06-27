@@ -3,6 +3,7 @@
 namespace Lsr\Core\Routing;
 
 use Lsr\Core\App;
+use Lsr\Core\CliController;
 use Lsr\Core\Controller;
 use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
@@ -152,12 +153,12 @@ class Router
 	private function loadRoutesFromControllers() : array {
 		$Directory = new RecursiveDirectoryIterator(ROOT.'src/Controllers/');
 		$Iterator = new RecursiveIteratorIterator($Directory);
-		$Regex = new RegexIterator($Iterator, '/^[A-Z].+\.php$/i', RegexIterator::GET_MATCH);
+		$Regex = new RegexIterator($Iterator, '/^.+\.php$/i', RegexIterator::GET_MATCH);
 
 		$files = [];
-		foreach ($Regex as $classFile) {
+		foreach ($Regex as [$classFile]) {
 			$className = '\App\\'.str_replace([ROOT.'src/', '.php', '/'], ['', '', '\\'], $classFile);
-			if (class_exists($className) && is_subclass_of($className, Controller::class)) {
+			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class))) {
 				$files[] = $classFile;
 				$this->loadRoutesFromController($className);
 			}
