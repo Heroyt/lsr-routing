@@ -3,9 +3,18 @@
 namespace Lsr\Core\Routing;
 
 use Lsr\Core\App;
+use Lsr\Core\Controller;
+use Lsr\Core\Routing\Attributes\Cli;
+use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Nette\Caching\Cache;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use ReflectionClass;
+use ReflectionException;
+use RegexIterator;
+use Throwable;
 
 class Router
 {
@@ -94,7 +103,7 @@ class Router
 	public function setup() : void {
 		try {
 			[self::$availableRoutes, self::$namedRoutes] = $this->cache->load('routes', [$this, 'loadRoutes']);
-		} catch (\Throwable $e) {
+		} catch (Throwable $e) {
 			$dep = [];
 			$this->loadRoutes($dep); // Fallback
 		}
@@ -106,17 +115,86 @@ class Router
 	 * @param array $dependency
 	 *
 	 * @return array[] [availableRoutes, namedRoutes]
+	 * @throws ReflectionException
 	 */
 	public function loadRoutes(array &$dependency) : array {
 		$dependencies[Cache::EXPIRE] = '1 days'; // Set expire times
 		$routeFiles = glob(ROOT.'routes/*.php'); // Find all config files
-		$dependency[Cache::FILES] = $routeFiles; // Set expire files
 
+		// Load from controllers
+		$controllerFiles = $this->loadRoutesFromControllers();
+
+		$dependency[Cache::FILES] = array_merge($routeFiles, $controllerFiles); // Set expire files
+
+		// Load from files
 		foreach ($routeFiles as $file) {
 			require $file;
 		}
 
 		return [self::$availableRoutes, self::$namedRoutes];
+	}
+
+	/**
+	 * Recursively scans for controller classes in src/Controllers directory and loads its routes
+	 *
+	 * @return string[] Found controller files
+	 * @throws ReflectionException
+	 */
+	private function loadRoutesFromControllers() : array {
+		$Directory = new RecursiveDirectoryIterator(ROOT.'src/Controllers/');
+		$Iterator = new RecursiveIteratorIterator($Directory);
+		$Regex = new RegexIterator($Iterator, '/^[A-Z].+\.php$/i', RegexIterator::GET_MATCH);
+
+		$files = [];
+		foreach ($Regex as $classFile) {
+			$className = '\App\\'.str_replace([ROOT.'src/', '.php', '/'], ['', '', '\\'], $classFile);
+			if (class_exists($className) && is_subclass_of($className, Controller::class)) {
+				$files[] = $classFile;
+				$this->loadRoutesFromController($className);
+			}
+		}
+		return $files;
+	}
+
+	/**
+	 * Scan controller's methods using reflection API to find any Route attributes
+	 *
+	 * @param string|object $controller
+	 *
+	 * @return void
+	 * @throws ReflectionException
+	 */
+	private function loadRoutesFromController(string|object $controller) : void {
+		// Initiate reflection class and get methods
+		$reflection = new ReflectionClass($controller);
+		foreach ($reflection->getMethods() as $method) {
+			// Find attributes of type Route
+			$attributes = $method->getAttributes(RouteAttribute::class, \ReflectionAttribute::IS_INSTANCEOF);
+			foreach ($attributes as $attribute) {
+				/** @var RouteAttribute $routeAttr */
+				$routeAttr = $attribute->newInstance(); // Must instantiate a new attribute object
+
+				// CLI route must be handled separately
+				if ($routeAttr->method === RequestMethod::CLI) {
+					$route = CliRoute::cli($routeAttr->path, [$controller, $method->getName()]);
+					if ($routeAttr instanceof Cli) {
+						// Set additional cli route information
+						// Must be set using a special Cli attribute
+						$route
+							->usage($routeAttr->usage)
+							->description($routeAttr->description)
+							->addArgument(...$routeAttr->arguments);
+					}
+					continue;
+				}
+
+				// Create normal web route
+				$route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+				if (!empty($routeAttr->name)) {
+					$route->name($routeAttr->name); // Optional argument
+				}
+			}
+		}
 	}
 
 	/**
