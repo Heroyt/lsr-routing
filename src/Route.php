@@ -9,7 +9,6 @@ namespace Lsr\Core\Routing;
 use InvalidArgumentException;
 use Lsr\Core\App;
 use Lsr\Core\Requests\Request;
-use Lsr\Core\Router;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\ControllerInterface;
 use Lsr\Interfaces\RequestInterface;

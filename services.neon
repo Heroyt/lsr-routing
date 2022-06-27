@@ -1,0 +1,5 @@
+services:
+	routing:
+		create: Lsr\Core\Routing\Router(@cache)
+		tags:
+			- routing
