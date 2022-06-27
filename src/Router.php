@@ -8,6 +8,7 @@ use Lsr\Core\Controller;
 use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Enums\RequestMethod;
+use Lsr\Helpers\Tools\Timer;
 use Lsr\Interfaces\RouteInterface;
 use Nette\Caching\Cache;
 use RecursiveDirectoryIterator;
@@ -103,6 +104,7 @@ class Router
 	 * @see Route
 	 */
 	public function setup() : void {
+		Timer::start('core.setup.router');
 		// Do not cache CLI requests
 		if (PHP_SAPI === 'cli') {
 			$dep = [];
@@ -117,6 +119,7 @@ class Router
 			$dep = [];
 			$this->loadRoutes($dep); // Fallback
 		}
+		Timer::stop('core.setup.router');
 	}
 
 	/**
@@ -175,6 +178,7 @@ class Router
 	 * @throws ReflectionException
 	 */
 	private function loadRoutesFromController(string|object $controller) : void {
+		Timer::startIncrementing('core.setup.router.controllers');
 		// Initiate reflection class and get methods
 		$reflection = new ReflectionClass($controller);
 		foreach ($reflection->getMethods() as $method) {
@@ -205,6 +209,7 @@ class Router
 				}
 			}
 		}
+		Timer::stop('core.setup.router.controllers');
 	}
 
 	/**
