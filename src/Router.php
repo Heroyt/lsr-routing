@@ -3,6 +3,7 @@
 namespace Lsr\Core\Routing;
 
 use Lsr\Core\App;
+use Lsr\Core\Caching\Cache;
 use Lsr\Core\CliController;
 use Lsr\Core\Controller;
 use Lsr\Core\Routing\Attributes\Cli;
@@ -10,7 +11,6 @@ use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Enums\RequestMethod;
 use Lsr\Helpers\Tools\Timer;
 use Lsr\Interfaces\RouteInterface;
-use Nette\Caching\Cache;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
@@ -116,8 +116,10 @@ class Router
 		try {
 			[self::$availableRoutes, self::$namedRoutes] = $this->cache->load('routes', [$this, 'loadRoutes']);
 		} catch (Throwable $e) {
-			$dep = [];
-			$this->loadRoutes($dep); // Fallback
+			if ($e->getMessage() !== 'Serialization of \'Closure\' is not allowed') {
+				$dep = [];
+				$this->loadRoutes($dep); // Fallback
+			}
 		}
 		Timer::stop('core.setup.router');
 	}
