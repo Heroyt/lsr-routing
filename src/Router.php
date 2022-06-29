@@ -133,13 +133,14 @@ class Router
 	 * @throws ReflectionException
 	 */
 	public function loadRoutes(array &$dependency) : array {
-		$dependencies[Cache::EXPIRE] = '1 days'; // Set expire times
+		$dependency[Cache::EXPIRE] = '1 days';   // Set expire times
 		$routeFiles = glob(ROOT.'routes/*.php'); // Find all config files
 
 		// Load from controllers
 		$controllerFiles = $this->loadRoutesFromControllers();
 
 		$dependency[Cache::FILES] = array_merge($routeFiles, $controllerFiles); // Set expire files
+		$dependency[Cache::Tags] = ['core'];
 
 		// Load from files
 		foreach ($routeFiles as $file) {
