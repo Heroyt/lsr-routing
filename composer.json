@@ -1,6 +1,7 @@
 {
 	"name": "lsr/routing",
 	"description": "Laser framework core - Routing.",
+	"version": "0.1.1",
 	"repositories": [
 		{
 			"type": "composer",
@@ -24,6 +25,6 @@
     "minimum-stability": "dev",
     "require": {
 			"php": ">=8.1",
-			"lsr/interfaces": "dev-master"
+			"lsr/interfaces": "^0.1"
 		}
 }
