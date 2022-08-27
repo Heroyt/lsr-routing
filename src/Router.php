@@ -10,9 +10,11 @@ use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Enums\RequestMethod;
 use Lsr\Helpers\Tools\Timer;
+use Lsr\Interfaces\ControllerInterface;
 use Lsr\Interfaces\RouteInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionException;
 use RegexIterator;
@@ -20,7 +22,7 @@ use Throwable;
 
 class Router
 {
-	/** @var RouteInterface[] Structure holding all set routes */
+	/** @var array<string, RouteInterface> Structure holding all set routes */
 	public static array $availableRoutes = [];
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
 	public static array $namedRoutes = [];
@@ -31,13 +33,14 @@ class Router
 	/**
 	 * Compare 2 different paths
 	 *
-	 * @param array      $path1
-	 * @param array|null $path2 Defaults to current request path
+	 * @param string[]      $path1
+	 * @param string[]|null $path2 Defaults to current request path
 	 *
 	 * @return bool
 	 */
 	public static function comparePaths(array $path1, ?array $path2 = null) : bool {
 		if (!isset($path2)) {
+			/** @phpstan-ignore-next-line */
 			$path2 = App::getRequest()->path;
 		}
 		foreach ($path1 as $key => $value) {
@@ -62,9 +65,9 @@ class Router
 	/**
 	 * Get set route if it exists
 	 *
-	 * @param RequestMethod $type   [GET, POST, DELETE, PUT]
-	 * @param array         $path   URL path as an array
-	 * @param array         $params URL parameters in a key-value array
+	 * @param RequestMethod        $type   [GET, POST, DELETE, PUT]
+	 * @param string[]             $path   URL path as an array
+	 * @param array<string, mixed> $params URL parameters in a key-value array
 	 *
 	 * @return RouteInterface|null
 	 */
@@ -114,6 +117,7 @@ class Router
 
 		// Cache normal requests
 		try {
+			/** @phpstan-ignore-next-line */
 			[self::$availableRoutes, self::$namedRoutes] = $this->cache->load('routes', [$this, 'loadRoutes']);
 		} catch (Throwable $e) {
 			if ($e->getMessage() !== 'Serialization of \'Closure\' is not allowed') {
@@ -127,14 +131,17 @@ class Router
 	/**
 	 * Load defined routes
 	 *
-	 * @param array $dependency
+	 * @param array<string,mixed> $dependency
 	 *
-	 * @return array[] [availableRoutes, namedRoutes]
+	 * @return RouteInterface[][] [availableRoutes, namedRoutes]
 	 * @throws ReflectionException
 	 */
 	public function loadRoutes(array &$dependency) : array {
 		$dependency[Cache::EXPIRE] = '1 days';   // Set expire times
 		$routeFiles = glob(ROOT.'routes/*.php'); // Find all config files
+		if ($routeFiles === false) {
+			$routeFiles = [];
+		}
 
 		// Load from controllers
 		$controllerFiles = $this->loadRoutesFromControllers();
@@ -162,6 +169,7 @@ class Router
 		$Regex = new RegexIterator($Iterator, '/^.+\.php$/i', RegexIterator::GET_MATCH);
 
 		$files = [];
+		/** @var string $classFile */
 		foreach ($Regex as [$classFile]) {
 			$className = '\App\\'.str_replace([ROOT.'src/', '.php', '/'], ['', '', '\\'], $classFile);
 			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class))) {
@@ -175,18 +183,18 @@ class Router
 	/**
 	 * Scan controller's methods using reflection API to find any Route attributes
 	 *
-	 * @param string|object $controller
+	 * @param class-string<ControllerInterface>|ControllerInterface $controller
 	 *
 	 * @return void
 	 * @throws ReflectionException
 	 */
-	private function loadRoutesFromController(string|object $controller) : void {
+	private function loadRoutesFromController(string|ControllerInterface $controller) : void {
 		Timer::startIncrementing('core.setup.router.controllers');
 		// Initiate reflection class and get methods
 		$reflection = new ReflectionClass($controller);
 		foreach ($reflection->getMethods() as $method) {
 			// Find attributes of type Route
-			$attributes = $method->getAttributes(RouteAttribute::class, \ReflectionAttribute::IS_INSTANCEOF);
+			$attributes = $method->getAttributes(RouteAttribute::class, ReflectionAttribute::IS_INSTANCEOF);
 			foreach ($attributes as $attribute) {
 				/** @var RouteAttribute $routeAttr */
 				$routeAttr = $attribute->newInstance(); // Must instantiate a new attribute object
@@ -219,8 +227,6 @@ class Router
 	 * Add a new route into availableRoutes array
 	 *
 	 * @param RouteInterface $route Route object
-	 *
-	 * @noinspection PhpUndefinedFieldInspection
 	 */
 	public function register(RouteInterface $route) : void {
 		$routes = &self::$availableRoutes;

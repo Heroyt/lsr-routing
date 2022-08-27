@@ -22,7 +22,7 @@ class Route implements RouteInterface
 	/** @var string URL in a string format */
 	public string $readablePath = '';
 
-	/** @var callable|array $handler Route callback */
+	/** @var callable|array{0: class-string, 1: string} $handler Route callback */
 	protected $handler;
 	/** @var Middleware[] Route's middleware objects */
 	protected array  $middleware = [];
@@ -32,8 +32,8 @@ class Route implements RouteInterface
 	/**
 	 * Route constructor.
 	 *
-	 * @param RequestMethod  $type
-	 * @param callable|array $handler
+	 * @param RequestMethod                              $type
+	 * @param callable|array{0: class-string, 1: string} $handler
 	 */
 	public function __construct(protected RequestMethod $type, callable|array $handler) {
 		$this->handler = $handler;
@@ -42,8 +42,8 @@ class Route implements RouteInterface
 	/**
 	 * Create a new GET route
 	 *
-	 * @param string         $pathString path
-	 * @param callable|array $handler    callback
+	 * @param string                                     $pathString path
+	 * @param callable|array{0: class-string, 1: string} $handler    callback
 	 *
 	 * @return Route
 	 */
@@ -54,9 +54,9 @@ class Route implements RouteInterface
 	/**
 	 * Create a new route
 	 *
-	 * @param RequestMethod  $type       [GET, POST, DELETE, PUT]
-	 * @param string         $pathString Path
-	 * @param callable|array $handler    Callback
+	 * @param RequestMethod                              $type       [GET, POST, DELETE, PUT]
+	 * @param string                                     $pathString Path
+	 * @param callable|array{0: class-string, 1: string} $handler    Callback
 	 *
 	 * @return Route
 	 */
@@ -76,8 +76,8 @@ class Route implements RouteInterface
 	/**
 	 * Create a new POST route
 	 *
-	 * @param string         $pathString
-	 * @param callable|array $handler
+	 * @param string                                     $pathString
+	 * @param callable|array{0: class-string, 1: string} $handler
 	 *
 	 * @return Route
 	 */
@@ -88,8 +88,8 @@ class Route implements RouteInterface
 	/**
 	 * Create a new UPDATE route
 	 *
-	 * @param string         $pathString
-	 * @param callable|array $handler
+	 * @param string                                     $pathString
+	 * @param callable|array{0: class-string, 1: string} $handler
 	 *
 	 * @return Route
 	 */
@@ -100,8 +100,8 @@ class Route implements RouteInterface
 	/**
 	 * Create a new DELETE route
 	 *
-	 * @param string         $pathString
-	 * @param callable|array $handler
+	 * @param string                                     $pathString
+	 * @param callable|array{0: class-string, 1: string} $handler
 	 *
 	 * @return Route
 	 */
@@ -112,13 +112,9 @@ class Route implements RouteInterface
 	/**
 	 * Handle a Request - calls any set Middleware and calls a route callback
 	 *
-	 * @param Request|null $request
+	 * @param Request $request
 	 */
-	public function handle(?RequestInterface $request = null) : void {
-		if (!isset($request)) {
-			throw new InvalidArgumentException('Request cannot be null.');
-		}
-
+	public function handle(RequestInterface $request) : void {
 		// Route-wide middleware
 		foreach ($this->middleware as $middleware) {
 			$middleware->handle($request);
@@ -131,8 +127,11 @@ class Route implements RouteInterface
 				$controller = App::getContainer()->getByType($class);
 
 				// Class-wide middleware
-				foreach ($controller->middleware as $middleware) {
-					$middleware->handle($request);
+				if (isset($controller->middleware)) {
+					/** @var Middleware $middleware */
+					foreach ($controller->middleware as $middleware) {
+						$middleware->handle($request);
+					}
 				}
 
 				$controller->init($request);
@@ -147,7 +146,7 @@ class Route implements RouteInterface
 	/**
 	 * Adds a middleware object to the Route
 	 *
-	 * @param Middleware[] $middleware
+	 * @param Middleware ...$middleware
 	 */
 	public function middleware(Middleware ...$middleware) : Route {
 		$this->middleware = array_merge($this->middleware, $middleware);
@@ -177,7 +176,7 @@ class Route implements RouteInterface
 	}
 
 	/**
-	 * @return array|callable
+	 * @return array{0: class-string, 1: string}|callable
 	 */
 	public function getHandler() : callable|array {
 		return $this->handler;

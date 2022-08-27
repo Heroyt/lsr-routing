@@ -7,7 +7,6 @@ namespace Lsr\Core\Routing;
 
 
 use Lsr\Core\App;
-use Lsr\Core\Requests\Request;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\ControllerInterface;
 use Lsr\Interfaces\RequestInterface;
@@ -23,17 +22,17 @@ class CliRoute implements RouteInterface
 	/** @var string Route's description to print */
 	public string $description = '';
 	/** @var callable|null Command's help information to print */
-	public $helpPrint = null;
-	/** @var array{name:string,isOptional:bool,description:string,suggestions:array}[] */
+	public $helpPrint;
+	/** @var array{name:string,isOptional:bool,description:string,suggestions?:string[],template?:string}[] */
 	public array $arguments = [];
-	/** @var callable|array $handler Route callback */
+	/** @var callable|array{0: class-string, 1: string} $handler Route callback */
 	protected $handler;
 
 	/**
 	 * Route constructor.
 	 *
-	 * @param RequestMethod  $type
-	 * @param callable|array $handler
+	 * @param RequestMethod                              $type
+	 * @param callable|array{0: class-string, 1: string} $handler
 	 */
 	public function __construct(protected RequestMethod $type, callable|array $handler) {
 		$this->handler = $handler;
@@ -42,8 +41,8 @@ class CliRoute implements RouteInterface
 	/**
 	 * Create a new GET route
 	 *
-	 * @param string         $pathString path
-	 * @param callable|array $handler    callback
+	 * @param string                                     $pathString path
+	 * @param callable|array{0: class-string, 1: string} $handler    callback
 	 *
 	 * @return CliRoute
 	 */
@@ -54,9 +53,9 @@ class CliRoute implements RouteInterface
 	/**
 	 * Create a new route
 	 *
-	 * @param RequestMethod  $type       [GET, POST, DELETE, PUT]
-	 * @param string         $pathString Path
-	 * @param callable|array $handler    Callback
+	 * @param RequestMethod                              $type       [GET, POST, DELETE, PUT]
+	 * @param string                                     $pathString Path
+	 * @param callable|array{0: class-string, 1: string} $handler    Callback
 	 *
 	 * @return CliRoute
 	 */
@@ -75,9 +74,9 @@ class CliRoute implements RouteInterface
 	/**
 	 * Handle a Request - calls any set Middleware and calls a route callback
 	 *
-	 * @param Request|null $request
+	 * @param RequestInterface $request
 	 */
-	public function handle(?RequestInterface $request = null) : void {
+	public function handle(RequestInterface $request) : void {
 		if (is_array($this->handler)) {
 			if (class_exists($this->handler[0])) {
 				[$class, $func] = $this->handler;
@@ -95,7 +94,7 @@ class CliRoute implements RouteInterface
 
 
 	/**
-	 * @return array|callable
+	 * @return array{0: class-string, 1: string}|callable
 	 */
 	public function getHandler() : callable|array {
 		return $this->handler;
@@ -132,7 +131,7 @@ class CliRoute implements RouteInterface
 	}
 
 	/**
-	 * @param array{name:string,isOptional:bool,description:string,suggestions:array} ...$argument
+	 * @param array{name:string,isOptional:bool,description:string,suggestions?:string[],template?:string} ...$argument
 	 *
 	 * @return $this
 	 */
