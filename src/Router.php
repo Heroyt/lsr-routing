@@ -68,12 +68,15 @@ class Router
 	 * @param RequestMethod        $type   [GET, POST, DELETE, PUT]
 	 * @param string[]             $path   URL path as an array
 	 * @param array<string, mixed> $params URL parameters in a key-value array
+	 * @param string[]|null        $routes Available routes that should be processed
 	 *
 	 * @return RouteInterface|null
 	 */
-	public static function getRoute(RequestMethod $type, array $path, array &$params = []) : ?RouteInterface {
-		$routes = self::$availableRoutes;
-		foreach ($path as $value) {
+	public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null) : ?RouteInterface {
+		if (!isset($routes)) {
+			$routes = self::$availableRoutes;
+		}
+		foreach ($path as $key => $value) {
 			if (isset($routes[$value])) {
 				$routes = $routes[$value];
 				continue;
@@ -87,6 +90,18 @@ class Router
 				$routes = reset($paramRoutes);
 				$params[$name] = $value;
 				continue;
+			}
+			else if (count($paramRoutes) > 1) { // Recurse
+				foreach ($paramRoutes as $paramKey => $paramRoute) {
+					$name = substr($paramKey, 1, -1);
+					$routes = $paramRoute;
+					$params[$name] = $value;
+					$route = self::getRoute($type, array_slice($path, $key), $params, $routes);
+					if (isset($route)) {
+						return $route; // Found
+					}
+					unset($params[$name]);
+				}
 			}
 
 			return null;
@@ -158,6 +173,50 @@ class Router
 	}
 
 	/**
+	 * Add a new route into availableRoutes array
+	 *
+	 * @param RouteInterface $route Route object
+	 */
+	public function register(RouteInterface $route) : void {
+		$routes = &self::$availableRoutes;
+		$type = $route->getMethod();
+		foreach ($route->getPath() as $name) {
+			$name = strtolower($name);
+			if (!isset($routes[$name])) {
+				$routes[$name] = [];
+			}
+			$routes = &$routes[$name];
+		}
+		if (!isset($routes[$type->value])) {
+			$routes[$type->value] = [];
+		}
+		$routes = &$routes[$type->value];
+		$routes[] = $route;
+	}
+
+	/**
+	 * Add a named class
+	 *
+	 * @param RouteInterface $route
+	 *
+	 * @return void
+	 */
+	public function registerNamed(RouteInterface $route) : void {
+		self::$namedRoutes[$route->getName()] = $route;
+	}
+
+	/**
+	 * Get named Route object if it exists
+	 *
+	 * @param string $name
+	 *
+	 * @return RouteInterface|null
+	 */
+	public function getRouteByName(string $name) : ?RouteInterface {
+		return self::$namedRoutes[$name] ?? null;
+	}
+
+	/**
 	 * Recursively scans for controller classes in src/Controllers directory and loads its routes
 	 *
 	 * @return string[] Found controller files
@@ -221,50 +280,6 @@ class Router
 			}
 		}
 		Timer::stop('core.setup.router.controllers');
-	}
-
-	/**
-	 * Add a new route into availableRoutes array
-	 *
-	 * @param RouteInterface $route Route object
-	 */
-	public function register(RouteInterface $route) : void {
-		$routes = &self::$availableRoutes;
-		$type = $route->getMethod();
-		foreach ($route->getPath() as $name) {
-			$name = strtolower($name);
-			if (!isset($routes[$name])) {
-				$routes[$name] = [];
-			}
-			$routes = &$routes[$name];
-		}
-		if (!isset($routes[$type->value])) {
-			$routes[$type->value] = [];
-		}
-		$routes = &$routes[$type->value];
-		$routes[] = $route;
-	}
-
-	/**
-	 * Add a named class
-	 *
-	 * @param RouteInterface $route
-	 *
-	 * @return void
-	 */
-	public function registerNamed(RouteInterface $route) : void {
-		self::$namedRoutes[$route->getName()] = $route;
-	}
-
-	/**
-	 * Get named Route object if it exists
-	 *
-	 * @param string $name
-	 *
-	 * @return RouteInterface|null
-	 */
-	public function getRouteByName(string $name) : ?RouteInterface {
-		return self::$namedRoutes[$name] ?? null;
 	}
 
 }
