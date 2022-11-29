@@ -165,7 +165,7 @@ class Route implements RouteInterface
 		/** @var Router $router */
 		$router = App::getService('routing');
 		$test = $router->getRouteByName($name);
-		if ($test !== null && $test !== $this) {
+		if ($test !== null && $test !== $this && $test->path !== $this->path && $test->getHandler() !== $this->handler) {
 			throw new InvalidArgumentException('Route of this name already exists. ('.$name.')');
 		}
 
