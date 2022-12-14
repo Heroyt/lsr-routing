@@ -94,7 +94,19 @@ class Route implements RouteInterface
 	 * @return Route
 	 */
 	public static function update(string $pathString, callable|array $handler) : Route {
-		return self::create(RequestMethod::UPDATE, $pathString, $handler);
+		return self::create(RequestMethod::PUT, $pathString, $handler);
+	}
+
+		/**
+	 * Create a new PUT route
+	 *
+	 * @param string                                     $pathString
+	 * @param callable|array{0: class-string, 1: string} $handler
+	 *
+	 * @return Route
+	 */
+	public static function put(string $pathString, callable|array $handler) : Route {
+		return self::create(RequestMethod::PUT, $pathString, $handler);
 	}
 
 	/**

@@ -6,7 +6,7 @@ use Attribute;
 use Lsr\Enums\RequestMethod;
 
 #[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
-class Update extends Route
+class Put extends Route
 {
 
 	public function __construct(
