@@ -23,3 +23,8 @@ Temporary Items
 .apdisk
 *.lock
 temp/
+tests/tmp
+tests/logs
+*.cache
+build
+docs
