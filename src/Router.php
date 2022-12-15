@@ -94,7 +94,8 @@ class Router
 				$params[$name] = $value;
 				continue;
 			}
-			else if (count($paramRoutes) > 1) { // Recurse
+
+			if (count($paramRoutes) > 1) { // Recurse
 				foreach ($paramRoutes as $paramKey => $paramRoute) {
 					$name = substr($paramKey, 1, -1);
 					$routes = $paramRoute;

@@ -4,15 +4,20 @@ namespace Lsr\Core\Routing\Tests\TestCases;
 
 use Lsr\Core\App;
 use Lsr\Core\Requests\Request;
+use Lsr\Core\Requests\Uri;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 use Lsr\Core\Routing\Tests\Mockup\Middleware\DummyMiddleware;
+use Lsr\Core\Routing\Tests\Mockup\Models\TestModel;
+use Lsr\Core\Routing\Tests\Mockup\Test2;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use Throwable;
 
 class RouteTest extends TestCase
 {
@@ -212,6 +217,95 @@ class RouteTest extends TestCase
 				[DummyController::class, 'actionWithParams'],
 				'Controller init'.PHP_EOL.'action: <69> '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR)
 			],
+			[
+				'/handle3/test',
+				'/handle3/test',
+				[DummyController::class, 'actionWithParams2'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'This is a DI TEST class',
+			],
+			[
+				'/handle3/model/{id}',
+				'/handle3/model/1',
+				[DummyController::class, 'actionWithModel'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'test1',
+			],
+			[
+				'/handle3/model2/{modelId}',
+				'/handle3/model2/2',
+				[DummyController::class, 'actionWithModel'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'test2',
+			],
+			[
+				'/handle3/model3/{model1Id}/{model2Id}',
+				'/handle3/model3/3/1',
+				[DummyController::class, 'actionWithMultipleModels'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'test3'.PHP_EOL.'test1',
+			],
+			[
+				'/handle3/model4',
+				'/handle3/model4',
+				[DummyController::class, 'actionWithOptionalModel'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'empty',
+			],
+			[
+				'/handle3/model5/{a}',
+				'/handle3/model5/1',
+				[DummyController::class, 'actionWithOptionalModel'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'empty',
+			],
+			[
+				'/handle3/model6/{id}',
+				'/handle3/model6/1',
+				[DummyController::class, 'actionWithOptionalModel'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'test1',
+			],
+			[
+				'/handle3/model6/{id}',
+				'/handle3/model6/99',
+				[DummyController::class, 'actionWithOptionalModel'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR).PHP_EOL.'empty',
+			],
+			[
+				'/handle3/service',
+				'/handle3/service',
+				[DummyController::class, 'actionWithInvalidOptionalService'],
+				'Controller init'.PHP_EOL.'action: '.json_encode(['controller' => 'Middleware'], JSON_THROW_ON_ERROR),
+			],
+		];
+	}
+
+	public function getHandleInvalid() : array {
+		return [
+			[
+				'/handle4/{id}',
+				'/handle4/1',
+				[DummyController::class, 'actionWithInvalidParams'],
+				'Unsupported route handler method type in '.DummyController::class.'::actionWithInvalidParams(). Only built-in types, RequestInterface and Model classes are supported.',
+			],
+			[
+				'/handle5/{id}',
+				'/handle5/1',
+				[DummyController::class, 'actionWithInvalidParams2'],
+				'Unsupported route handler method type in '.DummyController::class.'::actionWithInvalidParams2(object $id). Only built-in types, RequestInterface and Model classes are supported.',
+			],
+			[
+				'/handle6',
+				'/handle6',
+				[DummyController::class, 'actionWithModel'],
+				'Cannot instantiate Model for route. No ID route parameter. /handle6 - argument: '.TestModel::class.' $model. Expecting parameter "id" or "modelId".',
+			],
+			[
+				'/handle6/{id}',
+				'/handle6/99',
+				[DummyController::class, 'actionWithModel'],
+				'Cannot instantiate Model for route. Model not found. /handle6/{id} - argument: '.TestModel::class.' $model.',
+			],
+			[
+				'/handle7',
+				'/handle7',
+				[DummyController::class, 'actionWithInvalidService'],
+				'Service of type '.Test2::class.' not found. Did you add it to configuration file?',
+			],
 		];
 	}
 
@@ -228,11 +322,37 @@ class RouteTest extends TestCase
 	 */
 	public function testHandle(string $routePath, string $requestPath, array|callable $handler, string $expected) : void {
 		$route = Route::get($routePath, $handler);
-		$request = new Request($requestPath);
+		$request = new Request(new Uri('http://localhost'.$requestPath));
 		ob_start();
 		$route->handle($request);
 		$response = ob_get_clean();
 		self::assertSame($expected, $response);
+	}
+
+	/**
+	 * @dataProvider getHandleInvalid
+	 * @depends      testGet
+	 *
+	 * @param string         $routePath
+	 * @param string         $requestPath
+	 * @param array|callable $handler
+	 * @param string         $exceptionMessage
+	 *
+	 * @return void
+	 */
+	public function testHandleInvalid(string $routePath, string $requestPath, array|callable $handler, string $exceptionMessage) : void {
+		$route = Route::get($routePath, $handler);
+		$request = new Request(new Uri('http://localhost'.$requestPath));
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage($exceptionMessage);
+		ob_start();
+		try {
+			$route->handle($request);
+		} catch (Throwable $e) {
+			ob_get_clean();
+			throw $e;
+		}
+		ob_get_clean();
 	}
 
 	public function getRoutesNames() : array {
@@ -347,7 +467,7 @@ class RouteTest extends TestCase
 		$route = Route::get('/middleware', [$this, 'dummyRequestRouteCallback'])
 									->middleware(new DummyMiddleware($data));
 
-		$request = new Request('/middleware');
+		$request = new Request(new Uri('http://localhost/middleware'));
 		$request->request = ['this', 'will', 'be', 'overwritten'];
 
 		ob_start();

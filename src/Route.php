@@ -9,7 +9,6 @@ namespace Lsr\Core\Routing;
 use Lsr\Core\App;
 use Lsr\Core\Caching\Cache;
 use Lsr\Core\Exceptions\ModelNotFoundException;
-use Lsr\Core\Exceptions\ValidationException;
 use Lsr\Core\Models\Model;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
@@ -18,7 +17,6 @@ use Lsr\Helpers\Tools\Strings;
 use Lsr\Interfaces\ControllerInterface;
 use Lsr\Interfaces\RequestInterface;
 use Lsr\Interfaces\RouteInterface;
-use Lsr\Logging\Exceptions\DirectoryCreationException;
 use Nette\Caching\Cache as CacheParent;
 use Nette\DI\MissingServiceException;
 use ReflectionMethod;
@@ -191,10 +189,7 @@ class Route implements RouteInterface
 				$type = $argument->getType();
 
 				if (!$type instanceof ReflectionNamedType) {
-					if (!$optional) {
-						throw new RunTimeException('Unsupported route handler method type in '.implode('::', $this->handler).'(). Only built-in types, RequestInterface and Model classes are supported.');
-					}
-					continue;
+					throw new RunTimeException('Unsupported route handler method type in '.implode('::', $this->handler).'(). Only built-in types, RequestInterface and Model classes are supported.');
 				}
 
 				$args[$name] = [
@@ -220,8 +215,11 @@ class Route implements RouteInterface
 				// Check for model
 				if (is_subclass_of($type['type'], Model::class)) {
 					// Find ID
-					$paramName = Strings::toCamelCase($name.' id');
+					$paramName = Strings::toCamelCase($name.'_id');
 					$id = $request->getParam($paramName);
+					if (!isset($id)) {
+						$id = $request->getParam(strtolower($paramName));
+					}
 					if (!isset($id)) {
 						$id = $request->getParam('id');
 					}
@@ -229,14 +227,14 @@ class Route implements RouteInterface
 						if ($type['optional']) {
 							continue;
 						}
-						throw new RuntimeException('Cannot instantiate Model for route. No ID route parameter. '.$this->readablePath.' - argument: '.$type['type'].' $'.$name);
+						throw new RuntimeException('Cannot instantiate Model for route. No ID route parameter. '.$this->readablePath.' - argument: '.$type['type'].' $'.$name.'. Expecting parameter "id" or "'.$paramName.'".');
 					}
 					try {
 						$model = $type['type']::get((int) $id);
-					} catch (ModelNotFoundException|ValidationException|DirectoryCreationException $e) {
+					} catch (ModelNotFoundException $e) {
 						if (!$type['nullable']) {
 							// TODO: Handle 404 error
-							throw new RuntimeException('Cannot instantiate Model for route. Model not found. '.$this->readablePath.' - argument: '.$type['type'].' $'.$name, previous: $e);
+							throw new RuntimeException('Cannot instantiate Model for route. Model not found. '.$this->readablePath.' - argument: '.$type['type'].' $'.$name.'.', previous: $e);
 						}
 						$model = null;
 					}

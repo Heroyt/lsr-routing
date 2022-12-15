@@ -1,0 +1,2 @@
+services:
+	test: Lsr\Core\Routing\Tests\Mockup\Test
