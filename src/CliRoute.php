@@ -172,4 +172,62 @@ class CliRoute implements RouteInterface
 	public function getMethod() : RequestMethod {
 		return $this->type;
 	}
+
+	public function compare(RouteInterface $route) : bool {
+		return
+			$this->getMethod() === $route->getMethod() &&
+			static::compareRoutePaths($this->getPath(), $route->getPath()) &&
+			self::compareHandlers($this->getHandler(), $route->getHandler());
+	}
+
+	/**
+	 * Compare two route paths.
+	 *
+	 * Ignores different parameter names, but checks if both paths contain parameter at the same place.
+	 *
+	 * @param string[] $path1
+	 * @param string[] $path2
+	 *
+	 * @return bool True if the paths match.
+	 */
+	public static function compareRoutePaths(array $path1, array $path2) : bool {
+		if (count($path1) !== count($path2)) {
+			return false;
+		}
+		foreach ($path1 as $key => $part) {
+			// Test if part is parameter
+			if (preg_match('/({[^}]+})/', $part)) {
+				if (!preg_match('/({[^}]+})/', $path2[$key])) {
+					return false;
+				}
+				continue;
+			}
+			if ($part !== $path2[$key]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+
+	/**
+	 * Compare two route handlers.
+	 *
+	 * @param array{0:class-string|object, 1: string}|callable $handler1
+	 * @param array{0:class-string|object, 1: string}|callable $handler2
+	 *
+	 * @return bool
+	 */
+	public static function compareHandlers(array|callable $handler1, array|callable $handler2) : bool {
+		if (is_array($handler1) && is_array($handler2)) {
+			if (is_object($handler1[0])) {
+				$handler1[0] = $handler1[0]::class;
+			}
+			if (is_object($handler2[0])) {
+				$handler2[0] = $handler2[0]::class;
+			}
+			return $handler1[0] === $handler2[0] && $handler1[1] === $handler2[1];
+		}
+		return $handler1 === $handler2;
+	}
 }

@@ -8,6 +8,7 @@ use Lsr\Core\CliController;
 use Lsr\Core\Controller;
 use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
+use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Enums\RequestMethod;
 use Lsr\Helpers\Tools\Timer;
 use Lsr\Interfaces\ControllerInterface;
@@ -27,7 +28,9 @@ class Router
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
 	public static array $namedRoutes = [];
 
-	public function __construct(private readonly Cache $cache) {
+	public function __construct(
+		private readonly Cache $cache
+	) {
 	}
 
 	/**
@@ -176,6 +179,8 @@ class Router
 	 * Add a new route into availableRoutes array
 	 *
 	 * @param RouteInterface $route Route object
+	 *
+	 * @throws DuplicateRouteException
 	 */
 	public function register(RouteInterface $route) : void {
 		$routes = &self::$availableRoutes;
@@ -191,7 +196,13 @@ class Router
 			$routes[$type->value] = [];
 		}
 		$routes = &$routes[$type->value];
-		$routes[] = $route;
+		if (isset($routes[0])) {
+			if ($routes[0]->compare($route)) {
+				return;
+			}
+			throw new DuplicateRouteException($routes[0], $route);
+		}
+		$routes[0] = $route;
 	}
 
 	/**
