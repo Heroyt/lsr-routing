@@ -35,5 +35,10 @@
 	"require": {
 		"php": ">=8.1",
 		"lsr/interfaces": "^0.2-dev"
+	},
+	"extra": {
+		"branch-alias": {
+			"v0.2": "0.2.x-dev"
+		}
 	}
 }
