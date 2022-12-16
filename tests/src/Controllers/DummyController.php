@@ -3,6 +3,7 @@
 namespace Lsr\Core\Routing\Tests\Mockup\Controllers;
 
 use Lsr\Core\Controller;
+use Lsr\Core\Requests\CliRequest;
 use Lsr\Core\Requests\Request;
 use Lsr\Core\Routing\Tests\Mockup\Middleware\DummyMiddleware;
 use Lsr\Core\Routing\Tests\Mockup\Models\TestModel;
@@ -22,6 +23,10 @@ class DummyController extends Controller
 	public function init(RequestInterface $request) : void {
 		parent::init($request);
 		echo 'Controller init'.PHP_EOL;
+	}
+
+	public function cliAction(CliRequest $request) : void {
+		echo 'cli action';
 	}
 
 	public function action(Request $request) : void {

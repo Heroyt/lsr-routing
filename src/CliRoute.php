@@ -7,6 +7,7 @@ namespace Lsr\Core\Routing;
 
 
 use Lsr\Core\App;
+use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\ControllerInterface;
 use Lsr\Interfaces\RequestInterface;
@@ -25,14 +26,14 @@ class CliRoute implements RouteInterface
 	public $helpPrint;
 	/** @var array{name:string,isOptional:bool,description:string,suggestions?:string[],template?:string}[] */
 	public array $arguments = [];
-	/** @var callable|array{0: class-string, 1: string} $handler Route callback */
+	/** @var callable|array{0: class-string|object, 1: string} $handler Route callback */
 	protected $handler;
 
 	/**
 	 * Route constructor.
 	 *
-	 * @param RequestMethod                              $type
-	 * @param callable|array{0: class-string, 1: string} $handler
+	 * @param RequestMethod                                     $type
+	 * @param callable|array{0: class-string|object, 1: string} $handler
 	 */
 	public function __construct(protected RequestMethod $type, callable|array $handler) {
 		$this->handler = $handler;
@@ -41,10 +42,11 @@ class CliRoute implements RouteInterface
 	/**
 	 * Create a new GET route
 	 *
-	 * @param string                                     $pathString path
-	 * @param callable|array{0: class-string, 1: string} $handler    callback
+	 * @param string                                            $pathString path
+	 * @param callable|array{0: class-string|object, 1: string} $handler    callback
 	 *
 	 * @return CliRoute
+	 * @throws DuplicateRouteException
 	 */
 	public static function cli(string $pathString, callable|array $handler) : CliRoute {
 		return self::create(RequestMethod::CLI, $pathString, $handler);
@@ -53,11 +55,12 @@ class CliRoute implements RouteInterface
 	/**
 	 * Create a new route
 	 *
-	 * @param RequestMethod                              $type       [GET, POST, DELETE, PUT]
-	 * @param string                                     $pathString Path
-	 * @param callable|array{0: class-string, 1: string} $handler    Callback
+	 * @param RequestMethod                                     $type       [GET, POST, DELETE, PUT]
+	 * @param string                                            $pathString Path
+	 * @param callable|array{0: class-string|object, 1: string} $handler    Callback
 	 *
 	 * @return CliRoute
+	 * @throws DuplicateRouteException
 	 */
 	public static function create(RequestMethod $type, string $pathString, callable|array $handler) : CliRoute {
 		$route = new self($type, $handler);
@@ -78,12 +81,14 @@ class CliRoute implements RouteInterface
 	 */
 	public function handle(RequestInterface $request) : void {
 		if (is_array($this->handler)) {
-			if (class_exists($this->handler[0])) {
+			if (is_object($this->handler[0]) || class_exists($this->handler[0])) {
 				[$class, $func] = $this->handler;
 				/** @var ControllerInterface $controller */
-				$controller = App::getContainer()->getByType($class);
+				$controller = is_object($class) ? $class : App::getContainer()->getByType($class);
 
-				$controller->init($request);
+				if (method_exists($controller, 'init')) {
+					$controller->init($request);
+				}
 				$controller->$func($request);
 			}
 		}
@@ -94,7 +99,7 @@ class CliRoute implements RouteInterface
 
 
 	/**
-	 * @return array{0: class-string, 1: string}|callable
+	 * @return array{0: class-string|object, 1: string}|callable
 	 */
 	public function getHandler() : callable|array {
 		return $this->handler;
