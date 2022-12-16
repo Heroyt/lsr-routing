@@ -28,6 +28,11 @@ class Router
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
 	public static array $namedRoutes = [];
 
+	/**
+	 * @param Cache $cache
+	 *
+	 * @codeCoverageIgnore
+	 */
 	public function __construct(
 		private readonly Cache $cache
 	) {
@@ -43,8 +48,7 @@ class Router
 	 */
 	public static function comparePaths(array $path1, ?array $path2 = null) : bool {
 		if (!isset($path2)) {
-			/** @phpstan-ignore-next-line */
-			$path2 = App::getRequest()->path;
+			$path2 = App::getRequest()?->getPath() ?? [];
 		}
 		foreach ($path1 as $key => $value) {
 			if (!is_numeric($key)) {
@@ -77,42 +81,58 @@ class Router
 	 */
 	public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null) : ?RouteInterface {
 		if (!isset($routes)) {
-			$routes = self::$availableRoutes;
+			$routes = self::$availableRoutes; // Default routes value
 		}
+
+
 		foreach ($path as $key => $value) {
-			if (isset($routes[$value])) {
+			// Check if path key exists and if it does, move into it
+			if (isset($routes[$value]) && is_array($routes[$value])) {
 				$routes = $routes[$value];
 				continue;
 			}
 
+			// Get all parameter pats available for the current path
 			$paramRoutes = array_filter($routes, static function(string $key) {
 				return preg_match('/({[^}]+})/', $key) > 0;
 			},                          ARRAY_FILTER_USE_KEY);
+
+			// Exactly one available parameter found, set its value and move into it
 			if (count($paramRoutes) === 1) {
-				$name = substr(array_keys($paramRoutes)[0], 1, -1);
-				$routes = reset($paramRoutes);
-				$params[$name] = $value;
+				$name = substr(array_keys($paramRoutes)[0], 1, -1); // Remove the {} symbols from the name
+				$routes = reset($paramRoutes);                      // Move into the parameter routes
+				$params[$name] = $value;                            // Set the parameter value
 				continue;
 			}
 
-			if (count($paramRoutes) > 1) { // Recurse
+			// More than one parameter found -> check all possible paths
+			if (count($paramRoutes) > 1) {
 				foreach ($paramRoutes as $paramKey => $paramRoute) {
 					$name = substr($paramKey, 1, -1);
 					$routes = $paramRoute;
 					$params[$name] = $value;
-					$route = self::getRoute($type, array_slice($path, $key), $params, $routes);
-					if (isset($route)) {
-						return $route; // Found
+
+					// Recurse
+					$route = self::getRoute($type, array_slice($path, $key + 1), $params, $routes);
+					if (isset($route)) { // Found
+						return $route;
 					}
+					// Not found -> the parameter was invalid -> remove the parameter value and try the next parameter
 					unset($params[$name]);
 				}
 			}
 
+			// No route found
 			return null;
 		}
+
+		// Check if the request method exists for the found route
 		if (isset($routes[$type->value]) && count($routes[$type->value]) !== 0) {
+			// Return the first
 			return reset($routes[$type->value]);
 		}
+
+		// Route exists, but the method for this route doesn't
 		return null;
 	}
 
@@ -124,6 +144,7 @@ class Router
 	 *
 	 * @throws ReflectionException
 	 * @see Route
+	 * @codeCoverageIgnore
 	 */
 	public function setup() : void {
 		Timer::start('core.setup.router');
@@ -157,10 +178,14 @@ class Router
 	 */
 	public function loadRoutes(array &$dependency) : array {
 		$dependency[Cache::EXPIRE] = '1 days';   // Set expire times
+		/** @var false|string[] $routeFiles */
 		$routeFiles = glob(ROOT.'routes/*.php'); // Find all config files
+
+		// @codeCoverageIgnoreStart
 		if ($routeFiles === false) {
 			$routeFiles = [];
 		}
+		// @codeCoverageIgnoreEnd
 
 		// Load from controllers
 		$controllerFiles = $this->loadRoutesFromControllers();
@@ -242,7 +267,20 @@ class Router
 		$files = [];
 		/** @var string $classFile */
 		foreach ($Regex as [$classFile]) {
-			$className = '\App\\'.str_replace([ROOT.'src/', '.php', '/'], ['', '', '\\'], $classFile);
+			echo $classFile.PHP_EOL;
+			$f = fopen($classFile, 'rb');
+			$namespace = '\App\Controllers';
+			if (is_resource($f)) {
+				while ($read = fscanf($f, 'namespace %s;')) {
+					if (!empty($read[0])) {
+						$namespace = str_replace(';', '', $read[0]);
+						break;
+					}
+				}
+				fclose($f);
+			}
+			$className = $namespace.'\\'.str_replace([ROOT.'src/Controllers/', '.php', '/'], ['', '', '\\'], $classFile);
+			echo $className.PHP_EOL;
 			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class))) {
 				$files[] = $classFile;
 				$this->loadRoutesFromController($className);
