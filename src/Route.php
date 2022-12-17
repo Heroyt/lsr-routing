@@ -406,4 +406,8 @@ class Route implements RouteInterface
 	public function getReadable() : string {
 		return $this->readablePath;
 	}
+
+	public static function group(string $path = '') : RouteGroup {
+		return new RouteGroup($path);
+	}
 }
