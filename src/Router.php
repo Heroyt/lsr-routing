@@ -267,7 +267,6 @@ class Router
 		$files = [];
 		/** @var string $classFile */
 		foreach ($Regex as [$classFile]) {
-			echo $classFile.PHP_EOL;
 			$f = fopen($classFile, 'rb');
 			$namespace = '\App\Controllers';
 			if (is_resource($f)) {
@@ -280,7 +279,6 @@ class Router
 				fclose($f);
 			}
 			$className = $namespace.'\\'.str_replace([ROOT.'src/Controllers/', '.php', '/'], ['', '', '\\'], $classFile);
-			echo $className.PHP_EOL;
 			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class))) {
 				$files[] = $classFile;
 				$this->loadRoutesFromController($className);
