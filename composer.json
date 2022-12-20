@@ -1,7 +1,7 @@
 {
 	"name": "lsr/routing",
 	"description": "Laser framework core - Routing.",
-	"version": "dev-0.2.0",
+	"version": "0.2.0",
 	"repositories": [
 		{
 			"type": "composer",
