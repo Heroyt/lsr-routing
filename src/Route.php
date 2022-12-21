@@ -174,7 +174,7 @@ class Route implements RouteInterface
 		/** @var Cache $cache */
 		$cache = App::getService('cache');
 		/** @var array<string,array{optional:bool,type:string|class-string,nullable:bool}> $args */
-		$args = $cache->load('route.'.$this->readablePath.'.args', function(array &$dependency) {
+		$args = $cache->load('route.'.$this->type->value.'.'.$this->readablePath.'.args', function(array &$dependency) {
 			$dependency[CacheParent::EXPIRE] = '1 days';   // Set expire times
 			$dependency[CacheParent::Tags] = ['routes', 'core'];
 
