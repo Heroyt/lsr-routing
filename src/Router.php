@@ -2,6 +2,7 @@
 
 namespace Lsr\Core\Routing;
 
+use Lsr\Core\ApiController;
 use Lsr\Core\App;
 use Lsr\Core\Caching\Cache;
 use Lsr\Core\CliController;
@@ -278,8 +279,8 @@ class Router
 				}
 				fclose($f);
 			}
-			$className = $namespace.'\\'.str_replace([ROOT.'src/Controllers/', '.php', '/'], ['', '', '\\'], $classFile);
-			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class))) {
+			$className = $namespace.'\\'.basename($classFile, '.php');
+			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, ApiController::class))) {
 				$files[] = $classFile;
 				$this->loadRoutesFromController($className);
 			}
