@@ -53,7 +53,7 @@ class RouterTest extends TestCase
 
 	public function getRoutes() : array {
 		return [
-			[
+			/*[
 				Route::get('/router/route', [DummyController::class, 'action']),
 				RequestMethod::GET,
 				['router', 'route'],
@@ -122,12 +122,20 @@ class RouterTest extends TestCase
 				['invalid'],
 				[],
 				false,
+			],*/
+			[
+				Route::get('/settings/modes/{id}/variations', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['settings', 'modes', '1', 'variations'],
+				['id' => '1'],
+				true,
 			],
 		];
 	}
 
 	/**
 	 * @dataProvider getRoutes
+	 * @depends      testLoadRoutes
 	 *
 	 * @param RouteInterface      $route
 	 * @param RequestMethod       $method

@@ -86,7 +86,9 @@ class Router
 		}
 
 
-		foreach ($path as $key => $value) {
+		$counter = 0;
+		foreach ($path as $value) {
+			$counter++;
 			// Check if path key exists and if it does, move into it
 			if (isset($routes[$value]) && is_array($routes[$value])) {
 				$routes = $routes[$value];
@@ -95,7 +97,7 @@ class Router
 
 			// Get all parameter pats available for the current path
 			$paramRoutes = array_filter($routes, static function(string $key) {
-				return preg_match('/({[^}]+})/', $key) > 0;
+				return preg_match('/({[^}]+})\/?/', $key) > 0;
 			},                          ARRAY_FILTER_USE_KEY);
 
 			// Exactly one available parameter found, set its value and move into it
@@ -114,7 +116,7 @@ class Router
 					$params[$name] = $value;
 
 					// Recurse
-					$route = self::getRoute($type, array_slice($path, $key + 1), $params, $routes);
+					$route = self::getRoute($type, array_slice($path, $counter), $params, $routes);
 					if (isset($route)) { // Found
 						return $route;
 					}
