@@ -9,6 +9,7 @@ use Lsr\Core\CliController;
 use Lsr\Core\Controller;
 use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
+use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Enums\RequestMethod;
 use Lsr\Helpers\Tools\Timer;
@@ -31,11 +32,14 @@ class Router
 
 	/**
 	 * @param Cache $cache
-	 *
+	 * @param string[] $routeFiles
+	 * @param string[] $controllers
 	 * @codeCoverageIgnore
 	 */
 	public function __construct(
-		private readonly Cache $cache
+		private readonly Cache $cache,
+		private readonly array $routeFiles = [],
+		private readonly array $controllers = [],
 	) {
 	}
 
@@ -181,20 +185,35 @@ class Router
 	 */
 	public function loadRoutes(array &$dependency) : array {
 		$dependency[Cache::EXPIRE] = '1 days';   // Set expire times
-		/** @var false|string[] $routeFiles */
-		$routeFiles = glob(ROOT.'routes/*.php'); // Find all config files
 
-		// @codeCoverageIgnoreStart
-		if ($routeFiles === false) {
-			$routeFiles = [];
+		// Setup route files
+		$routeFiles = [];
+		foreach ($this->routeFiles as $file) {
+			if (is_dir($file)) {
+				$files = glob(trailingSlashIt($file) . '*.php');
+				if (is_array($files)) {
+					$routeFiles[] = $files;
+				}
+			}
+			else if (file_exists($file)) {
+				$routeFiles[] = [$file];
+			}
 		}
-		// @codeCoverageIgnoreEnd
+		$routeFiles = array_merge(...$routeFiles);
 
 		// Load from controllers
-		$controllerFiles = $this->loadRoutesFromControllers();
+		$controllerFiles = [];
+		foreach ($this->controllers as $file) {
+			if (is_dir($file)) {
+				$this->loadRoutesFromControllersDir($file, $controllerFiles);
+			}
+			else if (file_exists($file)) {
+				$this->loadRoutesFromControllerFile($file, $controllerFiles);
+			}
+		}
 
-		$dependency[Cache::FILES] = array_merge($routeFiles, $controllerFiles); // Set expire files
-		$dependency[Cache::Tags] = ['core'];
+		$dependency[Cache::Files] = array_merge($routeFiles, $controllerFiles); // Set expire files
+		$dependency[Cache::Tags] = ['core', 'routes'];
 
 		// Load from files
 		foreach ($routeFiles as $file) {
@@ -257,37 +276,53 @@ class Router
 	}
 
 	/**
-	 * Recursively scans for controller classes in src/Controllers directory and loads its routes
+	 * Recursively scans for controller classes in a directory and loads its routes
 	 *
-	 * @return string[] Found controller files
+	 * @param string $dir
+	 * @param string[] $files
+	 * @return void
+	 * @throws DuplicateNamedRouteException
+	 * @throws DuplicateRouteException
 	 * @throws ReflectionException
 	 */
-	private function loadRoutesFromControllers() : array {
-		$Directory = new RecursiveDirectoryIterator(ROOT.'src/Controllers/');
+	private function loadRoutesFromControllersDir(string $dir, array &$files = []): void {
+		$Directory = new RecursiveDirectoryIterator($dir);
 		$Iterator = new RecursiveIteratorIterator($Directory);
 		$Regex = new RegexIterator($Iterator, '/^.+\.php$/i', RegexIterator::GET_MATCH);
 
-		$files = [];
 		/** @var string $classFile */
 		foreach ($Regex as [$classFile]) {
-			$f = fopen($classFile, 'rb');
-			$namespace = '\App\Controllers';
-			if (is_resource($f)) {
-				while ($read = fscanf($f, 'namespace %s;')) {
-					if (!empty($read[0])) {
-						$namespace = str_replace(';', '', $read[0]);
-						break;
-					}
-				}
-				fclose($f);
-			}
-			$className = $namespace.'\\'.basename($classFile, '.php');
-			if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, ApiController::class))) {
-				$files[] = $classFile;
-				$this->loadRoutesFromController($className);
-			}
+			$this->loadRoutesFromControllerFile($classFile, $files);
 		}
-		return $files;
+	}
+
+	/**
+	 * Scan one controller file for a controller class and its defined routes
+	 *
+	 * @param string $classFile
+	 * @param string[] $files
+	 * @return void
+	 * @throws DuplicateNamedRouteException
+	 * @throws DuplicateRouteException
+	 * @throws ReflectionException
+	 */
+	private function loadRoutesFromControllerFile(string $classFile, array &$files = []): void {
+		$f = fopen($classFile, 'rb');
+		$namespace = '\App\Controllers';
+		if (is_resource($f)) {
+			while ($read = fscanf($f, 'namespace %s;')) {
+				if (!empty($read[0])) {
+					$namespace = str_replace(';', '', $read[0]);
+					break;
+				}
+			}
+			fclose($f);
+		}
+		$className = $namespace . '\\' . basename($classFile, '.php');
+		if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, ApiController::class))) {
+			$files[] = $classFile;
+			$this->loadRoutesFromController($className);
+		}
 	}
 
 	/**
@@ -296,6 +331,8 @@ class Router
 	 * @param class-string<ControllerInterface>|ControllerInterface $controller
 	 *
 	 * @return void
+	 * @throws DuplicateRouteException
+	 * @throws DuplicateNamedRouteException
 	 * @throws ReflectionException
 	 */
 	private function loadRoutesFromController(string|ControllerInterface $controller) : void {
