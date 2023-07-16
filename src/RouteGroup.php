@@ -59,7 +59,7 @@ class RouteGroup
 	}
 
 	private function combinePaths(string $path) : string {
-		return trailingSlashIt($this->path).($path[0] === '/' ? substr($path, 1) : $path);
+		return trailingSlashIt($this->path) . ($path !== '' && $path[0] === '/' ? substr($path, 1) : $path);
 	}
 
 	/**
