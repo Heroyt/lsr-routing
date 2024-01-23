@@ -2,7 +2,7 @@
 
 namespace Lsr\Core\Routing\Tests\Mockup\Controllers;
 
-use Lsr\Core\Controller;
+use Lsr\Core\Controllers\Controller;
 use Lsr\Core\Requests\CliRequest;
 use Lsr\Core\Requests\Request;
 use Lsr\Core\Routing\Tests\Mockup\Middleware\DummyMiddleware;

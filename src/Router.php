@@ -2,11 +2,11 @@
 
 namespace Lsr\Core\Routing;
 
-use Lsr\Core\ApiController;
 use Lsr\Core\App;
 use Lsr\Core\Caching\Cache;
-use Lsr\Core\CliController;
-use Lsr\Core\Controller;
+use Lsr\Core\Controllers\ApiController;
+use Lsr\Core\Controllers\CliController;
+use Lsr\Core\Controllers\Controller;
 use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
@@ -184,7 +184,7 @@ class Router
 	 * @throws ReflectionException
 	 */
 	public function loadRoutes(array &$dependency) : array {
-		$dependency[Cache::EXPIRE] = '1 days';   // Set expire times
+		$dependency[Cache::Expire] = '30 days';   // Set expire times
 
 		// Setup route files
 		$routeFiles = [];
@@ -212,7 +212,10 @@ class Router
 			}
 		}
 
-		$dependency[Cache::Files] = array_merge($routeFiles, $controllerFiles); // Set expire files
+		if (!App::isProduction()) {
+			$dependency[Cache::Files] = array_merge($routeFiles, $controllerFiles); // Set expire files
+		}
+
 		$dependency[Cache::Tags] = ['core', 'routes'];
 
 		// Load from files
