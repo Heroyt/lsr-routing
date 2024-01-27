@@ -34,14 +34,14 @@ class Router
 	 * @param Cache $cache
 	 * @param string[] $routeFiles
 	 * @param string[] $controllers
+	 *
 	 * @codeCoverageIgnore
 	 */
 	public function __construct(
 		private readonly Cache $cache,
 		private readonly array $routeFiles = [],
 		private readonly array $controllers = [],
-	) {
-	}
+	) {}
 
 	/**
 	 * Compare 2 different paths
@@ -100,9 +100,13 @@ class Router
 			}
 
 			// Get all parameter pats available for the current path
-			$paramRoutes = array_filter($routes, static function(string $key) {
-				return preg_match('/({[^}]+})\/?/', $key) > 0;
-			},                          ARRAY_FILTER_USE_KEY);
+			$paramRoutes = array_filter(
+				$routes,
+				static function (string $key) {
+					return preg_match('/({[^}]+})\/?/', $key) > 0;
+				},
+				ARRAY_FILTER_USE_KEY
+			);
 
 			// Exactly one available parameter found, set its value and move into it
 			if (count($paramRoutes) === 1) {
@@ -157,19 +161,22 @@ class Router
 		Timer::start('core.setup.router');
 		// Do not cache CLI requests
 		if (PHP_SAPI === 'cli') {
-			$dep = [];
-			$this->loadRoutes($dep);
+			$this->loadRoutes();
 			return;
 		}
 
 		// Cache normal requests
 		try {
 			/** @phpstan-ignore-next-line */
-			[self::$availableRoutes, self::$namedRoutes] = $this->cache->load('routes', [$this, 'loadRoutes']);
+			[self::$availableRoutes, self::$namedRoutes] = $this->cache
+				->load(
+					'routes',
+					[$this, 'loadRoutes'],
+					[Cache::Expire => '30 days', Cache::Tags => ['core', 'routes']]
+				);
 		} catch (Throwable $e) {
 			if ($e->getMessage() !== 'Serialization of \'Closure\' is not allowed') {
-				$dep = [];
-				$this->loadRoutes($dep); // Fallback
+				$this->loadRoutes(); // Fallback
 			}
 		}
 		Timer::stop('core.setup.router');
@@ -178,14 +185,11 @@ class Router
 	/**
 	 * Load defined routes
 	 *
-	 * @param array<string,mixed> $dependency
 	 *
 	 * @return RouteInterface[][] [availableRoutes, namedRoutes]
 	 * @throws ReflectionException
 	 */
-	public function loadRoutes(array &$dependency) : array {
-		$dependency[Cache::Expire] = '30 days';   // Set expire times
-
+	public function loadRoutes(): array {
 		// Setup route files
 		$routeFiles = [];
 		foreach ($this->routeFiles as $file) {
@@ -195,8 +199,10 @@ class Router
 					$routeFiles[] = $files;
 				}
 			}
-			else if (file_exists($file)) {
-				$routeFiles[] = [$file];
+			else {
+				if (file_exists($file)) {
+					$routeFiles[] = [$file];
+				}
 			}
 		}
 		$routeFiles = array_merge(...$routeFiles);
@@ -207,16 +213,12 @@ class Router
 			if (is_dir($file)) {
 				$this->loadRoutesFromControllersDir($file, $controllerFiles);
 			}
-			else if (file_exists($file)) {
-				$this->loadRoutesFromControllerFile($file, $controllerFiles);
+			else {
+				if (file_exists($file)) {
+					$this->loadRoutesFromControllerFile($file, $controllerFiles);
+				}
 			}
 		}
-
-		if (!App::isProduction()) {
-			$dependency[Cache::Files] = array_merge($routeFiles, $controllerFiles); // Set expire files
-		}
-
-		$dependency[Cache::Tags] = ['core', 'routes'];
 
 		// Load from files
 		foreach ($routeFiles as $file) {
@@ -227,62 +229,11 @@ class Router
 	}
 
 	/**
-	 * Add a new route into availableRoutes array
-	 *
-	 * @param RouteInterface $route Route object
-	 *
-	 * @throws DuplicateRouteException
-	 */
-	public function register(RouteInterface $route) : void {
-		$routes = &self::$availableRoutes;
-		$type = $route->getMethod();
-		foreach ($route->getPath() as $name) {
-			$name = strtolower($name);
-			if (!isset($routes[$name])) {
-				$routes[$name] = [];
-			}
-			$routes = &$routes[$name];
-		}
-		if (!isset($routes[$type->value])) {
-			$routes[$type->value] = [];
-		}
-		$routes = &$routes[$type->value];
-		if (isset($routes[0])) {
-			if ($routes[0]->compare($route)) {
-				return;
-			}
-			throw new DuplicateRouteException($routes[0], $route);
-		}
-		$routes[0] = $route;
-	}
-
-	/**
-	 * Add a named class
-	 *
-	 * @param RouteInterface $route
-	 *
-	 * @return void
-	 */
-	public function registerNamed(RouteInterface $route) : void {
-		self::$namedRoutes[$route->getName()] = $route;
-	}
-
-	/**
-	 * Get named Route object if it exists
-	 *
-	 * @param string $name
-	 *
-	 * @return RouteInterface|null
-	 */
-	public function getRouteByName(string $name) : ?RouteInterface {
-		return self::$namedRoutes[$name] ?? null;
-	}
-
-	/**
 	 * Recursively scans for controller classes in a directory and loads its routes
 	 *
 	 * @param string $dir
 	 * @param string[] $files
+	 *
 	 * @return void
 	 * @throws DuplicateNamedRouteException
 	 * @throws DuplicateRouteException
@@ -304,12 +255,13 @@ class Router
 	 *
 	 * @param string $classFile
 	 * @param string[] $files
+	 *
 	 * @return void
 	 * @throws DuplicateNamedRouteException
 	 * @throws DuplicateRouteException
 	 * @throws ReflectionException
 	 */
-	private function loadRoutesFromControllerFile(string $classFile, array &$files = []): void {
+	private function loadRoutesFromControllerFile(string $classFile, array &$files = []) : void {
 		$f = fopen($classFile, 'rb');
 		$namespace = '\App\Controllers';
 		if (is_resource($f)) {
@@ -371,6 +323,58 @@ class Router
 			}
 		}
 		Timer::stop('core.setup.router.controllers');
+	}
+
+	/**
+	 * Add a new route into availableRoutes array
+	 *
+	 * @param RouteInterface $route Route object
+	 *
+	 * @throws DuplicateRouteException
+	 */
+	public function register(RouteInterface $route): void {
+		$routes = &self::$availableRoutes;
+		$type = $route->getMethod();
+		foreach ($route->getPath() as $name) {
+			$name = strtolower($name);
+			if (!isset($routes[$name])) {
+				$routes[$name] = [];
+			}
+			$routes = &$routes[$name];
+		}
+		if (!isset($routes[$type->value])) {
+			$routes[$type->value] = [];
+		}
+		$routes = &$routes[$type->value];
+		if (isset($routes[0])) {
+			if ($routes[0]->compare($route)) {
+				return;
+			}
+			throw new DuplicateRouteException($routes[0], $route);
+		}
+		$routes[0] = $route;
+	}
+
+	/**
+	 * Add a named class
+	 *
+	 * @param RouteInterface $route
+	 *
+	 * @return void
+	 */
+	public function registerNamed(RouteInterface $route): void {
+		self::$namedRoutes[$route->getName()] = $route;
+	}
+
+	/**
+	 * Get named Route object if it exists
+	 *
+	 * @param string $name
+	 *
+	 * @return RouteInterface|null
+	 */
+	public function getRouteByName(string $name): ?RouteInterface {
+		return self::$namedRoutes[$name] ?? null;
 	}
 
 }

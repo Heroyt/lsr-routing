@@ -33,7 +33,7 @@ class RouterTest extends TestCase
 		self::assertFalse(isset(Router::$namedRoutes['registered-post']));
 
 		$dependency = [];
-		[$availableRoutes, $namedRoutes] = $router->loadRoutes($dependency);
+		[$availableRoutes, $namedRoutes] = $router->loadRoutes();
 
 		self::assertNotEmpty($availableRoutes['loaded']['GET']);
 		self::assertNotEmpty($availableRoutes['loaded']['POST']);
