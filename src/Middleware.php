@@ -6,18 +6,7 @@
 namespace Lsr\Core\Routing;
 
 
-use Lsr\Interfaces\RequestInterface;
-
-interface Middleware
+interface Middleware extends Psr\Http\Server\MiddlewareInterface
 {
-
-	/**
-	 * Handles a request
-	 *
-	 * @param RequestInterface $request
-	 *
-	 * @return bool
-	 */
-	public function handle(RequestInterface $request) : bool;
 
 }

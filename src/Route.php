@@ -19,6 +19,7 @@ use Lsr\Interfaces\RequestInterface;
 use Lsr\Interfaces\RouteInterface;
 use Nette\Caching\Cache as CacheParent;
 use Nette\DI\MissingServiceException;
+use Psr\Http\Message\ResponseInterface;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionType;
@@ -59,7 +60,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public static function post(string $pathString, callable|array $handler) : Route {
+	public static function post(string $pathString, callable|array $handler): Route {
 		return self::create(RequestMethod::POST, $pathString, $handler);
 	}
 
@@ -73,7 +74,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public static function create(RequestMethod $type, string $pathString, callable|array $handler) : Route {
+	public static function create(RequestMethod $type, string $pathString, callable|array $handler): Route {
 		$route = new self($type, $handler);
 		$route->path = array_filter(explode('/', $pathString), 'not_empty');
 		$route->readablePath = $pathString;
@@ -95,7 +96,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public static function update(string $pathString, callable|array $handler) : Route {
+	public static function update(string $pathString, callable|array $handler): Route {
 		return self::create(RequestMethod::PUT, $pathString, $handler);
 	}
 
@@ -108,7 +109,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public static function put(string $pathString, callable|array $handler) : Route {
+	public static function put(string $pathString, callable|array $handler): Route {
 		return self::create(RequestMethod::PUT, $pathString, $handler);
 	}
 
@@ -121,8 +122,12 @@ class Route implements RouteInterface
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public static function delete(string $pathString, callable|array $handler) : Route {
+	public static function delete(string $pathString, callable|array $handler): Route {
 		return self::create(RequestMethod::DELETE, $pathString, $handler);
+	}
+
+	public static function group(string $path = ''): RouteGroup {
+		return new RouteGroup($path);
 	}
 
 	/**
@@ -130,38 +135,57 @@ class Route implements RouteInterface
 	 *
 	 * @param RequestInterface $request
 	 *
+	 * @return ResponseInterface
 	 * @throws Throwable
 	 */
-	public function handle(RequestInterface $request) : void {
-		// Route-wide middleware
-		foreach ($this->middleware as $middleware) {
-			$middleware->handle($request);
-		}
+	public function handle(RequestInterface $request): ResponseInterface {
+		/** @var Middleware|false $middleware */
+		$middleware = current($this->middleware);
 
-		if (is_array($this->handler)) {
-			if (is_object($this->handler[0]) || class_exists($this->handler[0])) {
+		// No more middleware to process, call the handler
+		if ($middleware === false) {
+			if (is_array($this->handler) && (is_object($this->handler[0]) || class_exists($this->handler[0]))) {
 				[$class, $func] = $this->handler;
 				/** @var ControllerInterface $controller */
 				$controller = is_object($class) ? $class : App::getContainer()->getByType($class);
 
-				// Class-wide middleware
-				if (isset($controller->middleware)) {
-					/** @var Middleware $middleware */
-					foreach ($controller->middleware as $middleware) {
-						$middleware->handle($request);
-					}
+				// Controller-wide middleware
+				if (isset($controller->middleware) && count($controller->middleware) > 0) {
+					// Create a dispatcher
+					$dispatcher = new Dispatcher(
+						array_merge(
+							$controller->middleware,
+							[
+								function (RequestInterface $request) use ($controller, $func): ResponseInterface {
+									if (method_exists($controller, 'init')) {
+										$controller->init($request);
+									}
+									$args = $this->getHandlerArgs($request);
+
+									return $controller->$func(...$args);
+								},
+							]
+						)
+					);
+					return $dispatcher->handle($request);
 				}
 
 				if (method_exists($controller, 'init')) {
 					$controller->init($request);
 				}
 				$args = $this->getHandlerArgs($request);
-				$controller->$func(...$args);
+
+				return $controller->$func(...$args);
 			}
+
+			return call_user_func($this->handler, $request);
 		}
-		else {
-			call_user_func($this->handler, $request);
-		}
+
+		// Iterate to the next middleware
+		next($this->middleware);
+
+		// Process route-wide middleware
+		return $middleware->process($request, $this);
 	}
 
 	/**
@@ -170,36 +194,44 @@ class Route implements RouteInterface
 	 * @return array<string, int|string|float|bool|RequestInterface|Model>
 	 * @throws Throwable
 	 */
-	private function getHandlerArgs(RequestInterface $request) : array {
+	private function getHandlerArgs(RequestInterface $request): array {
 		/** @var Cache $cache */
 		$cache = App::getService('cache');
 		/** @var array<string,array{optional:bool,type:string|class-string,nullable:bool}> $args */
-		$args = $cache->load('route.'.$this->type->value.'.'.$this->readablePath.'.args', function(array &$dependency) {
-			$dependency[CacheParent::EXPIRE] = '1 days';   // Set expire times
-			$dependency[CacheParent::Tags] = ['routes', 'core'];
+		$args = $cache->load(
+			'route.' . $this->type->value . '.' . $this->readablePath . '.args',
+			function (array &$dependency) {
+				$dependency[CacheParent::Expire] = '1 days';   // Set expire times
+				$dependency[CacheParent::Tags] = ['routes', 'core'];
 
-			$reflection = new ReflectionMethod(...$this->handler);
-			$arguments = $reflection->getParameters();
-			$args = [];
-			foreach ($arguments as $argument) {
-				$name = $argument->getName();
-				$optional = $argument->isOptional();
+				$reflection = new ReflectionMethod(...$this->handler);
+				$arguments = $reflection->getParameters();
+				$args = [];
+				foreach ($arguments as $argument) {
+					$name = $argument->getName();
+					$optional = $argument->isOptional();
 
-				/** @var ReflectionType|null $type */
-				$type = $argument->getType();
+					/** @var ReflectionType|null $type */
+					$type = $argument->getType();
 
-				if (!$type instanceof ReflectionNamedType) {
-					throw new RunTimeException('Unsupported route handler method type in '.implode('::', $this->handler).'(). Only built-in types, RequestInterface and Model classes are supported.');
+					if (!$type instanceof ReflectionNamedType) {
+						throw new RunTimeException(
+							'Unsupported route handler method type in ' . implode(
+								'::',
+								$this->handler
+							) . '(). Only built-in types, RequestInterface and Model classes are supported.'
+						);
+					}
+
+					$args[$name] = [
+						'optional' => $optional,
+						'type'     => $type->getName(),
+						'nullable' => $type->allowsNull(),
+					];
 				}
-
-				$args[$name] = [
-					'optional' => $optional,
-					'type'     => $type->getName(),
-					'nullable' => $type->allowsNull(),
-				];
+				return $args;
 			}
-			return $args;
-		});
+		);
 
 		$argsValues = [];
 
@@ -215,7 +247,7 @@ class Route implements RouteInterface
 				// Check for model
 				if (is_subclass_of($type['type'], Model::class)) {
 					// Find ID
-					$paramName = Strings::toCamelCase($name.'_id');
+					$paramName = Strings::toCamelCase($name . '_id');
 					$id = $request->getParam($paramName);
 					if (!isset($id)) {
 						$id = $request->getParam(strtolower($paramName));
@@ -227,14 +259,19 @@ class Route implements RouteInterface
 						if ($type['optional']) {
 							continue;
 						}
-						throw new RuntimeException('Cannot instantiate Model for route. No ID route parameter. '.$this->readablePath.' - argument: '.$type['type'].' $'.$name.'. Expecting parameter "id" or "'.$paramName.'".');
+						throw new RuntimeException(
+							'Cannot instantiate Model for route. No ID route parameter. ' . $this->readablePath . ' - argument: ' . $type['type'] . ' $' . $name . '. Expecting parameter "id" or "' . $paramName . '".'
+						);
 					}
 					try {
-						$model = $type['type']::get((int) $id);
+						$model = $type['type']::get((int)$id);
 					} catch (ModelNotFoundException $e) {
 						if (!$type['nullable']) {
 							// TODO: Handle 404 error
-							throw new RuntimeException('Cannot instantiate Model for route. Model not found. '.$this->readablePath.' - argument: '.$type['type'].' $'.$name.'.', previous: $e);
+							throw new RuntimeException(
+								          'Cannot instantiate Model for route. Model not found. ' . $this->readablePath . ' - argument: ' . $type['type'] . ' $' . $name . '.',
+								previous: $e
+							);
 						}
 						$model = null;
 					}
@@ -257,11 +294,16 @@ class Route implements RouteInterface
 
 			// Basic types
 			$argsValues[$name] = match ($type['type']) {
-				'string' => (string) $request->getParam($name),
-				'integer', 'int' => (int) $request->getParam($name),
-				'double', 'float' => (float) $request->getParam($name),
-				'boolean', 'bool' => (bool) $request->getParam($name),
-				default => throw new RunTimeException('Unsupported route handler method type in '.implode('::', $this->handler).'('.$type['type'].' $'.$name.'). Only built-in types, RequestInterface and Model classes are supported.'),
+				'string'          => (string)$request->getParam($name),
+				'integer', 'int'  => (int)$request->getParam($name),
+				'double', 'float' => (float)$request->getParam($name),
+				'boolean', 'bool' => (bool)$request->getParam($name),
+				default           => throw new RunTimeException(
+					'Unsupported route handler method type in ' . implode(
+						'::',
+						$this->handler
+					) . '(' . $type['type'] . ' $' . $name . '). Only built-in types, RequestInterface and Model classes are supported.'
+				),
 			};
 		}
 
@@ -273,7 +315,7 @@ class Route implements RouteInterface
 	 *
 	 * @return string Can be empty if no name is set
 	 */
-	public function getName() : string {
+	public function getName(): string {
 		return $this->routeName;
 	}
 
@@ -286,7 +328,7 @@ class Route implements RouteInterface
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public static function get(string $pathString, callable|array $handler) : Route {
+	public static function get(string $pathString, callable|array $handler): Route {
 		return self::create(RequestMethod::GET, $pathString, $handler);
 	}
 
@@ -295,7 +337,7 @@ class Route implements RouteInterface
 	 *
 	 * @param Middleware ...$middleware
 	 */
-	public function middleware(Middleware ...$middleware) : Route {
+	public function middleware(Middleware ...$middleware): Route {
 		$this->middleware = array_merge($this->middleware, $middleware);
 		return $this;
 	}
@@ -308,7 +350,7 @@ class Route implements RouteInterface
 	 * @return $this
 	 * @throws DuplicateNamedRouteException
 	 */
-	public function name(string $name) : Route {
+	public function name(string $name): Route {
 		// Test for duplicate names
 		/** @var Router $router */
 		$router = App::getService('routing');
@@ -323,7 +365,7 @@ class Route implements RouteInterface
 		return $this;
 	}
 
-	public function compare(RouteInterface $route) : bool {
+	public function compare(RouteInterface $route): bool {
 		return
 			$this->getMethod() === $route->getMethod() &&
 			static::compareRoutePaths($this->getPath(), $route->getPath()) &&
@@ -333,7 +375,7 @@ class Route implements RouteInterface
 	/**
 	 * @return RequestMethod
 	 */
-	public function getMethod() : RequestMethod {
+	public function getMethod(): RequestMethod {
 		return $this->type;
 	}
 
@@ -347,7 +389,7 @@ class Route implements RouteInterface
 	 *
 	 * @return bool True if the paths match.
 	 */
-	public static function compareRoutePaths(array $path1, array $path2) : bool {
+	public static function compareRoutePaths(array $path1, array $path2): bool {
 		if (count($path1) !== count($path2)) {
 			return false;
 		}
@@ -371,7 +413,7 @@ class Route implements RouteInterface
 	 *
 	 * @return string[]
 	 */
-	public function getPath() : array {
+	public function getPath(): array {
 		return $this->path;
 	}
 
@@ -383,7 +425,7 @@ class Route implements RouteInterface
 	 *
 	 * @return bool
 	 */
-	public static function compareHandlers(array|callable $handler1, array|callable $handler2) : bool {
+	public static function compareHandlers(array|callable $handler1, array|callable $handler2): bool {
 		if (is_array($handler1) && is_array($handler2)) {
 			if (is_object($handler1[0])) {
 				$handler1[0] = $handler1[0]::class;
@@ -399,15 +441,11 @@ class Route implements RouteInterface
 	/**
 	 * @return array{0: class-string|object, 1: string}|callable
 	 */
-	public function getHandler() : callable|array {
+	public function getHandler(): callable|array {
 		return $this->handler;
 	}
 
-	public function getReadable() : string {
+	public function getReadable(): string {
 		return $this->readablePath;
-	}
-
-	public static function group(string $path = '') : RouteGroup {
-		return new RouteGroup($path);
 	}
 }
