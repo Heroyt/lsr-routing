@@ -20,6 +20,7 @@ use Lsr\Interfaces\RouteInterface;
 use Nette\Caching\Cache as CacheParent;
 use Nette\DI\MissingServiceException;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionType;
@@ -138,7 +139,7 @@ class Route implements RouteInterface
 	 * @return ResponseInterface
 	 * @throws Throwable
 	 */
-	public function handle(RequestInterface $request): ResponseInterface {
+	public function handle(ServerRequestInterface $request): ResponseInterface {
 		/** @var Middleware|false $middleware */
 		$middleware = current($this->middleware);
 

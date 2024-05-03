@@ -1,48 +1,49 @@
 {
-	"name": "lsr/routing",
-	"description": "Laser framework core - Routing.",
-  "version": "0.2.10",
-	"repositories": [
-		{
-			"type": "composer",
-			"url": "https://packages.laserliga.cz"
-		}
-	],
-	"require-dev": {
+  "name": "lsr/routing",
+  "description": "Laser framework core - Routing.",
+  "version": "0.2.11",
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://packages.laserliga.cz"
+    }
+  ],
+  "require-dev": {
+    "roave/security-advisories": "dev-latest",
     "phpunit/phpunit": "^11",
-		"phpstan/phpstan": "^1.8",
-		"lsr/core": "^0.2",
-		"lsr/request": "^0.2"
-	},
-	"autoload": {
-		"psr-4": {
-			"Lsr\\Core\\Routing\\": "src/"
-		}
-	},
-	"autoload-dev": {
-		"psr-4": {
-			"Lsr\\Core\\Routing\\Tests\\TestCases\\": "tests/TestCases/",
-			"Lsr\\Core\\Routing\\Tests\\Mockup\\": "tests/src/"
-		}
-	},
-	"authors": [
-		{
-			"name": "Tomáš Vojík",
-			"email": "vojik@wboy.cz"
-		}
-	],
-	"minimum-stability": "stable",
-	"require": {
+    "phpstan/phpstan": "^1.8",
+    "lsr/core": "^0.2",
+    "lsr/request": "^0.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "Lsr\\Core\\Routing\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Lsr\\Core\\Routing\\Tests\\TestCases\\": "tests/TestCases/",
+      "Lsr\\Core\\Routing\\Tests\\Mockup\\": "tests/src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Tomáš Vojík",
+      "email": "vojik@wboy.cz"
+    }
+  ],
+  "minimum-stability": "stable",
+  "require": {
     "php": ">=8.2",
     "lsr/interfaces": "^0.2",
     "psr/http-server-middleware": "^1.0",
     "psr/http-server-handler": "^1.0"
-	},
-	"extra": {
-		"branch-alias": {
-			"v0.2": "0.2.x-dev",
-			"dev-master": "0.2.x-dev",
-			"dev-main": "0.2.x-dev"
-		}
-	}
+  },
+  "extra": {
+    "branch-alias": {
+      "v0.2": "0.2.x-dev",
+      "dev-master": "0.2.x-dev",
+      "dev-main": "0.2.x-dev"
+    }
+  }
 }

@@ -7,7 +7,6 @@ use Lsr\Core\Caching\Cache;
 use Lsr\Core\Controllers\ApiController;
 use Lsr\Core\Controllers\CliController;
 use Lsr\Core\Controllers\Controller;
-use Lsr\Core\Routing\Attributes\Cli;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
@@ -187,6 +186,8 @@ class Router
 	 *
 	 *
 	 * @return RouteInterface[][] [availableRoutes, namedRoutes]
+	 * @throws DuplicateNamedRouteException
+	 * @throws DuplicateRouteException
 	 * @throws ReflectionException
 	 */
 	public function loadRoutes(): array {
@@ -300,20 +301,6 @@ class Router
 			foreach ($attributes as $attribute) {
 				/** @var RouteAttribute $routeAttr */
 				$routeAttr = $attribute->newInstance(); // Must instantiate a new attribute object
-
-				// CLI route must be handled separately
-				if ($routeAttr->method === RequestMethod::CLI) {
-					$route = CliRoute::cli($routeAttr->path, [$controller, $method->getName()]);
-					if ($routeAttr instanceof Cli) {
-						// Set additional cli route information
-						// Must be set using a special Cli attribute
-						$route
-							->usage($routeAttr->usage)
-							->description($routeAttr->description)
-							->addArgument(...$routeAttr->arguments);
-					}
-					continue;
-				}
 
 				// Create normal web route
 				$route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
