@@ -5,5 +5,7 @@ parameters:
 services:
 	routing:
 		create: Lsr\Core\Routing\Router(@cache, %routing.routeFiles%, %routing.controllers%)
+		setup:
+			- setup()
 		tags:
 			- routing
