@@ -5,7 +5,6 @@ namespace Lsr\Core\Routing;
 use Lsr\Core\App;
 use Lsr\Core\Caching\Cache;
 use Lsr\Core\Controllers\ApiController;
-use Lsr\Core\Controllers\CliController;
 use Lsr\Core\Controllers\Controller;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
@@ -52,7 +51,7 @@ class Router
 	 */
 	public static function comparePaths(array $path1, ?array $path2 = null) : bool {
 		if (!isset($path2)) {
-			$path2 = App::getRequest()?->getPath() ?? [];
+			$path2 = App::getInstance()->getRequest()?->getPath() ?? [];
 		}
 		foreach ($path1 as $key => $value) {
 			if (!is_numeric($key)) {
@@ -200,10 +199,8 @@ class Router
 					$routeFiles[] = $files;
 				}
 			}
-			else {
-				if (file_exists($file)) {
-					$routeFiles[] = [$file];
-				}
+			else if (file_exists($file)) {
+				$routeFiles[] = [$file];
 			}
 		}
 		$routeFiles = array_merge(...$routeFiles);
@@ -214,10 +211,8 @@ class Router
 			if (is_dir($file)) {
 				$this->loadRoutesFromControllersDir($file, $controllerFiles);
 			}
-			else {
-				if (file_exists($file)) {
-					$this->loadRoutesFromControllerFile($file, $controllerFiles);
-				}
+			else if (file_exists($file)) {
+				$this->loadRoutesFromControllerFile($file, $controllerFiles);
 			}
 		}
 
@@ -303,9 +298,15 @@ class Router
 				$routeAttr = $attribute->newInstance(); // Must instantiate a new attribute object
 
 				// Create normal web route
-				$route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+				$route = Route::createRoute($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+				$this->register($route);
 				if (!empty($routeAttr->name)) {
-					$route->name($routeAttr->name); // Optional argument
+					$test = $this->getRouteByName($routeAttr->name);
+					if ($test !== null && !$route->compare($test)) {
+						throw new DuplicateNamedRouteException($test, $route);
+					}
+					$this->registerNamed($route);
+					$route->setName($routeAttr->name); // Optional argument
 				}
 			}
 		}

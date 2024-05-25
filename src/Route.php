@@ -76,9 +76,7 @@ class Route implements RouteInterface
 	 * @throws DuplicateRouteException
 	 */
 	public static function create(RequestMethod $type, string $pathString, callable|array $handler): Route {
-		$route = new self($type, $handler);
-		$route->path = array_filter(explode('/', $pathString), 'not_empty');
-		$route->readablePath = $pathString;
+		$route = self::createRoute($type, $pathString, $handler);
 
 		// Register route
 		/** @var Router $router */
@@ -129,6 +127,20 @@ class Route implements RouteInterface
 
 	public static function group(string $path = ''): RouteGroup {
 		return new RouteGroup($path);
+	}
+
+	/**
+	 * @param RequestMethod  $type
+	 * @param callable|array{0: class-string|object, 1: string} $handler
+	 * @param string         $pathString
+	 *
+	 * @return self
+	 */
+	public static function createRoute(RequestMethod $type, string $pathString, callable|array $handler): Route {
+		$route = new self($type, $handler);
+		$route->path = array_filter(explode('/', $pathString), 'not_empty');
+		$route->readablePath = $pathString;
+		return $route;
 	}
 
 	/**
@@ -363,6 +375,11 @@ class Route implements RouteInterface
 		// Register named route
 		$this->routeName = $name;
 		$router->registerNamed($this);
+		return $this;
+	}
+
+	public function setName(string $name): Route {
+		$this->routeName = $name;
 		return $this;
 	}
 
