@@ -6,7 +6,9 @@
 namespace Lsr\Core\Routing;
 
 
-interface Middleware extends Psr\Http\Server\MiddlewareInterface
+use Psr\Http\Server\MiddlewareInterface;
+
+interface Middleware extends MiddlewareInterface
 {
 
 }
