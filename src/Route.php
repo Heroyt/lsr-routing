@@ -280,9 +280,8 @@ class Route implements RouteInterface
 						$model = $type['type']::get((int)$id);
 					} catch (ModelNotFoundException $e) {
 						if (!$type['nullable']) {
-							// TODO: Handle 404 error
-							throw new RuntimeException(
-								          'Cannot instantiate Model for route. Model not found. ' . $this->readablePath . ' - argument: ' . $type['type'] . ' $' . $name . '.',
+							throw new ModelNotFoundException(
+								'Cannot instantiate Model for route. Model not found. ' . $this->readablePath . ' - argument: ' . $type['type'] . ' $' . $name . '.',
 								previous: $e
 							);
 						}

@@ -9,6 +9,7 @@ use Lsr\Core\Controllers\Controller;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
+use Lsr\Core\Routing\Exceptions\MethodNotAllowedException;
 use Lsr\Enums\RequestMethod;
 use Lsr\Helpers\Tools\Timer;
 use Lsr\Interfaces\ControllerInterface;
@@ -81,12 +82,13 @@ class Router
 	 * @param string[]|null        $routes Available routes that should be processed
 	 *
 	 * @return RouteInterface|null
+	 *
+	 * @throws MethodNotAllowedException
 	 */
 	public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null) : ?RouteInterface {
 		if (!isset($routes)) {
 			$routes = self::$availableRoutes; // Default routes value
 		}
-
 
 		$counter = 0;
 		foreach ($path as $value) {
@@ -142,7 +144,7 @@ class Router
 		}
 
 		// Route exists, but the method for this route doesn't
-		return null;
+		throw new MethodNotAllowedException('Method '.$type->value.' is not allowed for path /'.implode('/', $path));
 	}
 
 	/**
