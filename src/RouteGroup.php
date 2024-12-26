@@ -19,6 +19,7 @@ class RouteGroup
 	protected array $groups = [];
 
 	public function __construct(
+		protected readonly Router $router,
 		public readonly string         $path = '',
 		protected readonly ?RouteGroup $parent = null,
 	) {
@@ -28,12 +29,12 @@ class RouteGroup
 	 * Create a new GET route in the group
 	 *
 	 * @param string                                         $path
-	 * @param array{0:class-string|object,1:string}|callable $handler
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
 	 *
 	 * @return $this
 	 * @throws Exceptions\DuplicateRouteException
 	 */
-	public function get(string $path, array|callable $handler) : static {
+	public function get(string $path, array|callable|RouteInterface $handler) : static {
 		return $this->route(RequestMethod::GET, $path, $handler);
 	}
 
@@ -42,14 +43,14 @@ class RouteGroup
 	 *
 	 * @param RequestMethod                                  $method
 	 * @param string                                         $path
-	 * @param array{0:class-string|object,1:string}|callable $handler
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
 	 *
 	 * @return $this
 	 * @throws Exceptions\DuplicateRouteException
 	 */
-	public function route(RequestMethod $method, string $path, array|callable $handler) : static {
-		$route = Route::create($method, $this->combinePaths($path), $handler);
-		// Add already added middleware to the route
+	public function route(RequestMethod $method, string $path, array|callable|RouteInterface $handler) : static {
+		$route = $this->router->route($method, $this->combinePaths($path), $handler);
+		// Add an already added middleware to the route
 		$route->middleware(...$this->middleware);
 		// Save route
 		$this->routes[$method->value.':'.$path] = $route;
@@ -109,12 +110,12 @@ class RouteGroup
 	 * Create a new POST route in the group
 	 *
 	 * @param string                                         $path
-	 * @param array{0:class-string|object,1:string}|callable $handler
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
 	 *
 	 * @return $this
 	 * @throws Exceptions\DuplicateRouteException
 	 */
-	public function post(string $path, array|callable $handler) : static {
+	public function post(string $path, array|callable|RouteInterface $handler) : static {
 		return $this->route(RequestMethod::POST, $path, $handler);
 	}
 
@@ -122,12 +123,12 @@ class RouteGroup
 	 * Create a new DELETE route in the group
 	 *
 	 * @param string                                         $path
-	 * @param array{0:class-string|object,1:string}|callable $handler
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
 	 *
 	 * @return $this
 	 * @throws Exceptions\DuplicateRouteException
 	 */
-	public function delete(string $path, array|callable $handler) : static {
+	public function delete(string $path, array|callable|RouteInterface $handler) : static {
 		return $this->route(RequestMethod::DELETE, $path, $handler);
 	}
 
@@ -135,12 +136,12 @@ class RouteGroup
 	 * Create a new PUT route in the group
 	 *
 	 * @param string                                         $path
-	 * @param array{0:class-string|object,1:string}|callable $handler
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
 	 *
 	 * @return $this
 	 * @throws Exceptions\DuplicateRouteException
 	 */
-	public function put(string $path, array|callable $handler) : static {
+	public function put(string $path, array|callable|RouteInterface $handler) : static {
 		return $this->route(RequestMethod::PUT, $path, $handler);
 	}
 
@@ -148,12 +149,12 @@ class RouteGroup
 	 * Create a new PUT route in the group
 	 *
 	 * @param string                                         $path
-	 * @param array{0:class-string|object,1:string}|callable $handler
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
 	 *
 	 * @return $this
 	 * @throws Exceptions\DuplicateRouteException
 	 */
-	public function update(string $path, array|callable $handler) : static {
+	public function update(string $path, array|callable|RouteInterface $handler) : static {
 		return $this->route(RequestMethod::PUT, $path, $handler);
 	}
 
@@ -189,7 +190,7 @@ class RouteGroup
 	 * @return RouteGroup
 	 */
 	public function group(string $path) : RouteGroup {
-		$group = new self($this->combinePaths($path), $this);
+		$group = new self($this->router, $this->combinePaths($path), $this);
 		$group->middlewareAll(...$this->middleware);
 		$this->groups[$path] = $group;
 		return $group;

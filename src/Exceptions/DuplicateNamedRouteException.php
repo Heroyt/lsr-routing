@@ -8,7 +8,7 @@ use Throwable;
 class DuplicateNamedRouteException extends DuplicateRouteException
 {
 
-	public function __construct(RouteInterface $original, RouteInterface $new, int $code = 0, Throwable $previous = null) {
+	public function __construct(RouteInterface $original, RouteInterface $new, int $code = 0, ?Throwable $previous = null) {
 		parent::__construct($original, $new, $code, $previous);
 		$this->message = 'Duplicate named route "'.$original->getName().': '.$original->getMethod()->value.' '.$original->getReadable().'"';
 	}

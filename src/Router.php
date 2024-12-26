@@ -2,17 +2,12 @@
 
 namespace Lsr\Core\Routing;
 
-use Lsr\Core\App;
-use Lsr\Core\Caching\Cache;
-use Lsr\Core\Controllers\ApiController;
-use Lsr\Core\Controllers\Controller;
+use Lsr\Caching\Cache;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Exceptions\MethodNotAllowedException;
 use Lsr\Enums\RequestMethod;
-use Lsr\Helpers\Tools\Timer;
-use Lsr\Interfaces\ControllerInterface;
 use Lsr\Interfaces\RouteInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -30,7 +25,7 @@ class Router
 	public static array $namedRoutes = [];
 
 	/**
-	 * @param Cache $cache
+	 * @param Cache    $cache
 	 * @param string[] $routeFiles
 	 * @param string[] $controllers
 	 *
@@ -40,7 +35,8 @@ class Router
 		private readonly Cache $cache,
 		private readonly array $routeFiles = [],
 		private readonly array $controllers = [],
-	) {}
+	) {
+	}
 
 	/**
 	 * Compare 2 different paths
@@ -50,10 +46,7 @@ class Router
 	 *
 	 * @return bool
 	 */
-	public static function comparePaths(array $path1, ?array $path2 = null) : bool {
-		if (!isset($path2)) {
-			$path2 = App::getInstance()->getRequest()?->getPath() ?? [];
-		}
+	public static function comparePaths(array $path1, array $path2): bool {
 		foreach ($path1 as $key => $value) {
 			if (!is_numeric($key)) {
 				unset($path1[$key]);
@@ -85,7 +78,7 @@ class Router
 	 *
 	 * @throws MethodNotAllowedException
 	 */
-	public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null) : ?RouteInterface {
+	public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null): ?RouteInterface {
 		if (!isset($routes)) {
 			$routes = self::$availableRoutes; // Default routes value
 		}
@@ -93,7 +86,7 @@ class Router
 		$counter = 0;
 		foreach ($path as $value) {
 			$counter++;
-			// Check if path key exists and if it does, move into it
+			// Check if path key exists and if it does, move into it.
 			if (isset($routes[$value]) && is_array($routes[$value])) {
 				$routes = $routes[$value];
 				continue;
@@ -108,18 +101,22 @@ class Router
 				ARRAY_FILTER_USE_KEY
 			);
 
-			// Exactly one available parameter found, set its value and move into it
+			// Exactly one available parameter found, set its value and move into it.
 			if (count($paramRoutes) === 1) {
 				$name = substr(array_keys($paramRoutes)[0], 1, -1); // Remove the {} symbols from the name
-				$routes = reset($paramRoutes);                      // Move into the parameter routes
+				$key = array_key_first($paramRoutes);
+				assert($key !== null);
+				assert(is_array($paramRoutes[$key]));
+				$routes = $paramRoutes[$key];                       // Move into the parameter routes
 				$params[$name] = $value;                            // Set the parameter value
 				continue;
 			}
 
-			// More than one parameter found -> check all possible paths
+			// More than one parameter found → check all possible paths
 			if (count($paramRoutes) > 1) {
 				foreach ($paramRoutes as $paramKey => $paramRoute) {
 					$name = substr($paramKey, 1, -1);
+					assert(is_array($paramRoute));
 					$routes = $paramRoute;
 					$params[$name] = $value;
 
@@ -128,7 +125,7 @@ class Router
 					if (isset($route)) { // Found
 						return $route;
 					}
-					// Not found -> the parameter was invalid -> remove the parameter value and try the next parameter
+					// Not found → the parameter was invalid → remove the parameter value and try the next parameter.
 					unset($params[$name]);
 				}
 			}
@@ -144,7 +141,9 @@ class Router
 		}
 
 		// Route exists, but the method for this route doesn't
-		throw new MethodNotAllowedException('Method '.$type->value.' is not allowed for path /'.implode('/', $path));
+		throw new MethodNotAllowedException(
+			'Method ' . $type->value . ' is not allowed for path /' . implode('/', $path)
+		);
 	}
 
 	/**
@@ -157,29 +156,24 @@ class Router
 	 * @see Route
 	 * @codeCoverageIgnore
 	 */
-	public function setup() : void {
-		Timer::start('core.setup.router');
-		// Do not cache CLI requests
-		if (PHP_SAPI === 'cli') {
-			$this->loadRoutes();
-			return;
-		}
-
-		// Cache normal requests
+	public function setup(): void {
+		// Cache requests
 		try {
 			/** @phpstan-ignore-next-line */
 			[self::$availableRoutes, self::$namedRoutes] = $this->cache
 				->load(
 					'routes',
 					[$this, 'loadRoutes'],
-					[Cache::Expire => '30 days', Cache::Tags => ['core', 'routes']]
+					[
+						Cache::Expire => '30 days',
+						Cache::Tags   => ['core', 'routes'],
+					]
 				);
 		} catch (Throwable $e) {
 			if ($e->getMessage() !== 'Serialization of \'Closure\' is not allowed') {
 				$this->loadRoutes(); // Fallback
 			}
 		}
-		Timer::stop('core.setup.router');
 	}
 
 	/**
@@ -227,9 +221,17 @@ class Router
 	}
 
 	/**
+	 * Unregister all routes
+	 */
+	public function unregisterAll(): void {
+		self::$availableRoutes = [];
+		self::$namedRoutes = [];
+	}
+
+	/**
 	 * Recursively scans for controller classes in a directory and loads its routes
 	 *
-	 * @param string $dir
+	 * @param string   $dir
 	 * @param string[] $files
 	 *
 	 * @return void
@@ -251,7 +253,7 @@ class Router
 	/**
 	 * Scan one controller file for a controller class and its defined routes
 	 *
-	 * @param string $classFile
+	 * @param string   $classFile
 	 * @param string[] $files
 	 *
 	 * @return void
@@ -259,7 +261,7 @@ class Router
 	 * @throws DuplicateRouteException
 	 * @throws ReflectionException
 	 */
-	private function loadRoutesFromControllerFile(string $classFile, array &$files = []) : void {
+	private function loadRoutesFromControllerFile(string $classFile, array &$files = []): void {
 		$f = fopen($classFile, 'rb');
 		$namespace = '\App\Controllers';
 		if (is_resource($f)) {
@@ -272,7 +274,7 @@ class Router
 			fclose($f);
 		}
 		$className = $namespace . '\\' . basename($classFile, '.php');
-		if (class_exists($className) && (is_subclass_of($className, Controller::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, CliController::class) || is_subclass_of($className, ApiController::class))) {
+		if (class_exists($className)) {
 			$files[] = $classFile;
 			$this->loadRoutesFromController($className);
 		}
@@ -281,15 +283,14 @@ class Router
 	/**
 	 * Scan controller's methods using reflection API to find any Route attributes
 	 *
-	 * @param class-string<ControllerInterface>|ControllerInterface $controller
+	 * @param class-string|object $controller
 	 *
 	 * @return void
 	 * @throws DuplicateRouteException
 	 * @throws DuplicateNamedRouteException
 	 * @throws ReflectionException
 	 */
-	private function loadRoutesFromController(string|ControllerInterface $controller) : void {
-		Timer::startIncrementing('core.setup.router.controllers');
+	private function loadRoutesFromController(string|object $controller): void {
 		// Initiate reflection class and get methods
 		$reflection = new ReflectionClass($controller);
 		foreach ($reflection->getMethods() as $method) {
@@ -300,7 +301,7 @@ class Router
 				$routeAttr = $attribute->newInstance(); // Must instantiate a new attribute object
 
 				// Create normal web route
-				$route = Route::createRoute($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+				$route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
 				$this->register($route);
 				if (!empty($routeAttr->name)) {
 					$test = $this->getRouteByName($routeAttr->name);
@@ -312,7 +313,6 @@ class Router
 				}
 			}
 		}
-		Timer::stop('core.setup.router.controllers');
 	}
 
 	/**
@@ -346,6 +346,17 @@ class Router
 	}
 
 	/**
+	 * Get named Route object if it exists
+	 *
+	 * @param string $name
+	 *
+	 * @return RouteInterface|null
+	 */
+	public function getRouteByName(string $name): ?RouteInterface {
+		return self::$namedRoutes[$name] ?? null;
+	}
+
+	/**
 	 * Add a named class
 	 *
 	 * @param RouteInterface $route
@@ -357,14 +368,81 @@ class Router
 	}
 
 	/**
-	 * Get named Route object if it exists
+	 * @param string         $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
 	 *
-	 * @param string $name
-	 *
-	 * @return RouteInterface|null
+	 * @return Route
+	 * @throws DuplicateRouteException
 	 */
-	public function getRouteByName(string $name): ?RouteInterface {
-		return self::$namedRoutes[$name] ?? null;
+	public function get(string $pathString, callable|array|RouteInterface $handler) : Route {
+		return $this->route(RequestMethod::GET, $pathString, $handler);
+	}
+
+	/**
+	 * @param string         $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function post(string $pathString, callable|array|RouteInterface $handler) : Route {
+		return $this->route(RequestMethod::POST, $pathString, $handler);
+	}
+
+	/**
+	 * @param string         $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function delete(string $pathString, callable|array|RouteInterface $handler) : Route {
+		return $this->route(RequestMethod::DELETE, $pathString, $handler);
+	}
+
+	/**
+	 * @param string         $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function update(string $pathString, callable|array|RouteInterface $handler) : Route {
+		return $this->route(RequestMethod::UPDATE, $pathString, $handler);
+	}
+
+	/**
+	 * @param string         $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function put(string $pathString, callable|array|RouteInterface $handler) : Route {
+		return $this->route(RequestMethod::PUT, $pathString, $handler);
+	}
+
+	/**
+	 * @param RequestMethod                                     $method
+	 * @param string                                            $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 */
+	public function route(RequestMethod $method, string $pathString, callable|array|RouteInterface $handler) : Route {
+		if ($handler instanceof RouteInterface) {
+			$route = AliasRoute::createAlias($method, $pathString, $handler);
+		}
+		else {
+			$route = Route::create($method, $pathString, $handler);
+		}
+		$route->setRouter($this);
+		$this->register($route);
+		return $route;
+	}
+
+	public function group(string $path = '') : RouteGroup {
+		return new RouteGroup($this, $path);
 	}
 
 }
