@@ -3,8 +3,6 @@
 
 /** @noinspection PhpIllegalPsrClassPathInspection */
 
-use Lsr\Core\App;
-use Lsr\Core\DB;
 
 const ROOT = __DIR__.'/';
 const PRIVATE_DIR = ROOT.'private/';
@@ -37,31 +35,16 @@ foreach (array_merge(glob(TMP_DIR.'*.php'), glob(TMP_DIR.'di/*')) as $file) {
 
 require_once ROOT.'../vendor/autoload.php';
 
-App::init();
-
-DB::init();
-DB::getConnection()->query("
-			CREATE TABLE test ( 
-			    id_model integer PRIMARY KEY autoincrement NOT NULL , 
-			    name char(60) NOT NULL 
-			);
-		");
-
-DB::insert('test', ['id_model' => 1, 'name' => 'test1']);
-DB::insert('test', ['id_model' => 2, 'name' => 'test2']);
-DB::insert('test', ['id_model' => 3, 'name' => 'test3']);
-
-
 file_put_contents(ROOT.'routes/test.php', "<?php
-use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
-Route::get('/loaded', [DummyController::class, 'action'])->name('get-loaded');
-Route::post('/loaded', [DummyController::class, 'action']);
-Route::delete('/loaded', [DummyController::class, 'action'])->name('delete-loaded');
-Route::get('/loaded/{id}', [DummyController::class, 'action']);
-Route::post('/loaded/{id}', [DummyController::class, 'action']);
 
-Route::group('/settings')
+\$this->get('/loaded', [DummyController::class, 'action'])->name('get-loaded');
+\$this->post('/loaded', [DummyController::class, 'action']);
+\$this->delete('/loaded', [DummyController::class, 'action'])->name('delete-loaded');
+\$this->get('/loaded/{id}', [DummyController::class, 'action']);
+\$this->post('/loaded/{id}', [DummyController::class, 'action']);
+
+\$this->group('/settings')
 	->get('/', [DummyController::class, 'action'])->name('settings')
 	->post('/', [DummyController::class, 'action'])
 	->get('/gate', [DummyController::class, 'action'])->name('settings-gate')

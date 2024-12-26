@@ -2,7 +2,7 @@
 
 namespace Lsr\Core\Routing\Tests\Mockup;
 
-class Test2
+class Model2
 {
 
 }

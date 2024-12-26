@@ -7,8 +7,8 @@ use Lsr\Core\Requests\CliRequest;
 use Lsr\Core\Requests\Request;
 use Lsr\Core\Routing\Tests\Mockup\Middleware\DummyMiddleware;
 use Lsr\Core\Routing\Tests\Mockup\Models\TestModel;
-use Lsr\Core\Routing\Tests\Mockup\Test;
-use Lsr\Core\Routing\Tests\Mockup\Test2;
+use Lsr\Core\Routing\Tests\Mockup\Model1;
+use Lsr\Core\Routing\Tests\Mockup\Model2;
 use Lsr\Core\Templating\Latte;
 use Lsr\Interfaces\RequestInterface;
 
@@ -37,7 +37,7 @@ class DummyController extends Controller
 		echo 'action: <'.$id.'> '.json_encode($request->request, JSON_THROW_ON_ERROR);
 	}
 
-	public function actionWithParams2(Request $request, Test $test) : void {
+	public function actionWithParams2(Request $request, Model1 $test) : void {
 		echo 'action: '.json_encode($request->request, JSON_THROW_ON_ERROR).PHP_EOL;
 		$test->echo();
 	}
@@ -62,11 +62,11 @@ class DummyController extends Controller
 		echo 'action: '.json_encode($request->request, JSON_THROW_ON_ERROR);
 	}
 
-	public function actionWithInvalidService(Request $request, Test2 $test) : void {
+	public function actionWithInvalidService(Request $request, Model2 $test) : void {
 		echo 'action: '.json_encode($request->request, JSON_THROW_ON_ERROR);
 	}
 
-	public function actionWithInvalidOptionalService(Request $request, ?Test2 $test = null) : void {
+	public function actionWithInvalidOptionalService(Request $request, ?Model2 $test = null) : void {
 		echo 'action: '.json_encode($request->request, JSON_THROW_ON_ERROR);
 	}
 

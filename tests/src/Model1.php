@@ -2,7 +2,7 @@
 
 namespace Lsr\Core\Routing\Tests\Mockup;
 
-class Test
+class Model1
 {
 
 	public function echo() : void {
