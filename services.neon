@@ -2,8 +2,5 @@ parameters:
 	routing:
 		routeFiles: []
 		controllers: []
-services:
-	routing:
-		create: Lsr\Core\Routing\Router(@cache, %routing.routeFiles%, %routing.controllers%)
-		tags:
-			- routing
+extensions:
+	routing: Lsr\Core\Routing\DI\RoutingExtension

@@ -1,7 +1,7 @@
 {
   "name": "lsr/routing",
   "description": "Laser framework core - Routing.",
-  "version": "0.2.15",
+  "version": "0.3.0",
   "repositories": [
     {
       "type": "composer",
@@ -11,9 +11,8 @@
   "require-dev": {
     "roave/security-advisories": "dev-latest",
     "phpunit/phpunit": "^11",
-    "phpstan/phpstan": "^1.8",
-    "lsr/core": "^0.2",
-    "lsr/request": "^0.2"
+    "phpstan/phpstan": "^2",
+    "squizlabs/php_codesniffer": "^3.11"
   },
   "autoload": {
     "psr-4": {
@@ -32,12 +31,21 @@
       "email": "vojik@wboy.cz"
     }
   ],
+  "scripts": {
+    "test": "XDEBUG_MODE=coverage ./vendor/bin/phpunit",
+    "docs": "doxygen",
+    "phpstan": "./vendor/bin/phpstan",
+    "phpcs": "./vendor/bin/phpcs",
+    "phpcbf": "./vendor/bin/phpcbf"
+  },
   "minimum-stability": "stable",
   "require": {
-    "php": ">=8.2",
-    "lsr/interfaces": "^0.2",
+    "php": ">= 8.4",
+    "lsr/interfaces": "^0.3",
     "psr/http-server-middleware": "^1.0",
-    "psr/http-server-handler": "^1.0"
+    "psr/http-server-handler": "^1.0",
+    "lsr/cache": "^0.3.0",
+    "lsr/helpers": "^0.3.0"
   },
   "extra": {
     "branch-alias": {
