@@ -8,7 +8,7 @@ use Nette;
 use Nette\DI\CompilerExtension;
 
 /**
- * @property-read object{routeFiles: non-empty-string[], controllers: non-empty-string[]} $config
+ * @property object{routeFiles: non-empty-string[], controllers: non-empty-string[]} $config
  */
 class RoutingExtension extends CompilerExtension
 {

@@ -4,11 +4,11 @@ use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 $this->get('/loaded', [DummyController::class, 'action'])->name('get-loaded');
 $this->post('/loaded', [DummyController::class, 'action']);
 $this->delete('/loaded', [DummyController::class, 'action'])->name('delete-loaded');
-$this->get('/loaded/{id}', [DummyController::class, 'action']);
+$this->get('/loaded/{id}', [DummyController::class, 'action'])->localize('cs', 'nahrano/{id}');
 $this->post('/loaded/{id}', [DummyController::class, 'action']);
 
 $this->group('/settings')
-	->get('/', [DummyController::class, 'action'])->name('settings')
+	->get('/', [DummyController::class, 'action'])->name('settings')->localize('cs', 'nastaveni')
 	->post('/', [DummyController::class, 'action'])
 	->get('/gate', [DummyController::class, 'action'])->name('settings-gate')
 	->post('/gate', [DummyController::class, 'action'])

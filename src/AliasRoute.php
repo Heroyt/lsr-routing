@@ -18,7 +18,7 @@ class AliasRoute extends Route
 		parent::__construct($type, [$this, 'redirect']);
 	}
 
-	public static function createAlias(RequestMethod $type, string $pathString, RouteInterface $redirectTo): static {
+	public static function createAlias(RequestMethod $type, string $pathString, RouteInterface $redirectTo): AliasRoute {
 		$route = new self($type, $redirectTo);
 		$route->path = array_filter(explode('/', $pathString), 'not_empty');
 		$route->readablePath = $pathString;
@@ -29,7 +29,7 @@ class AliasRoute extends Route
 		return Response::create(
 			308, // Permanent redirect
 			[
-				'Location' => $this->redirectTo->getPath(),
+				'Location' => '/'.implode('/', $this->redirectTo->getPath()),
 			]
 		);
 	}

@@ -25,6 +25,11 @@ class Route implements RouteInterface
 	public array                 $middleware = [];
 	public protected(set) string $routeName  = '';
 
+	/**
+	 * @var array<string, RouteInterface>
+	 */
+	public protected(set) array $localizedRoutes  = [];
+
 	protected ?Router $router = null;
 
 
@@ -32,7 +37,7 @@ class Route implements RouteInterface
 	 * Route constructor.
 	 *
 	 * @param RequestMethod                                     $type
-	 * @param callable|array{0: class-string|object, 1: string} $handler
+	 * @param callable-string|array{0: class-string|object, 1: string}|Closure $handler
 	 */
 	public function __construct(
 		protected(set) RequestMethod $type,
@@ -51,6 +56,7 @@ class Route implements RouteInterface
 	 * @throws DuplicateRouteException
 	 */
 	public static function create(RequestMethod $type, string $pathString, callable|array $handler): Route {
+		/** @phpstan-ignore argument.type */
 		$route = new self($type, $handler);
 		$route->path = array_filter(explode('/', $pathString), static fn(string $part) => !empty($part));
 		$route->readablePath = $pathString;
@@ -191,6 +197,21 @@ class Route implements RouteInterface
 
 	public function setRouter(Router $router): Route {
 		$this->router = $router;
+		return $this;
+	}
+
+	/**
+	 * @param string $locale
+	 * @param string $path
+	 *
+	 * @return $this
+	 */
+	public function localize(string $locale, string $path): Route {
+		assert($this->router !== null);
+		$route = LocalizedRoute::createLocalized($this->getMethod(), $path, $locale, $this);
+		$route->setRouter($this->router);
+		$this->router->register($route);
+		$this->localizedRoutes[$locale] = $route;
 		return $this;
 	}
 }

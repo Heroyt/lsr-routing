@@ -31,17 +31,19 @@ class DuplicateRouteException extends RuntimeException
 	}
 
 	/**
-	 * @codeCoverageIgnore
+	 * @param array{0: class-string|object, 1: string}|callable $callable
 	 */
-	private function printCallable(array|callable $callable): string {
+	protected function printCallable(array|callable $callable): string {
 		if (is_array($callable)) {
 			$str = '';
 			if (is_object($callable[0])) {
 				$str .= $callable[0]::class;
 			}
 			else {
+				assert(is_string($callable[0]));
 				$str .= $callable[0];
 			}
+			assert(is_string($callable[1]));
 			$str .= '::' . $callable[1] . '()';
 			return $str;
 		}

@@ -12,7 +12,8 @@
     "roave/security-advisories": "dev-latest",
     "phpunit/phpunit": "^11",
     "phpstan/phpstan": "^2",
-    "squizlabs/php_codesniffer": "^3.11"
+    "squizlabs/php_codesniffer": "^3.11",
+    "nyholm/psr7": "^1.8"
   },
   "autoload": {
     "psr-4": {
@@ -41,11 +42,13 @@
   "minimum-stability": "stable",
   "require": {
     "php": ">= 8.4",
-    "lsr/interfaces": "^0.3",
+    "lsr/interfaces": "^0.3.1",
     "psr/http-server-middleware": "^1.0",
     "psr/http-server-handler": "^1.0",
     "lsr/cache": "^0.3.0",
-    "lsr/helpers": "^0.3.0"
+    "lsr/helpers": "^0.3.0",
+    "lsr/request": "^0.3.0",
+    "nette/di": "^3.2"
   },
   "extra": {
     "branch-alias": {

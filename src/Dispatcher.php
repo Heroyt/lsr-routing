@@ -6,7 +6,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
-readonly class Dispatcher implements RequestHandlerInterface
+class Dispatcher implements RequestHandlerInterface
 {
 
 	/**
@@ -33,7 +33,9 @@ readonly class Dispatcher implements RequestHandlerInterface
 		}
 
 		if (is_callable($current)) {
-			return $current($request);
+			$response = $current($request);
+			assert($response instanceof ResponseInterface);
+			return $response;
 		}
 
 		throw new \RuntimeException(

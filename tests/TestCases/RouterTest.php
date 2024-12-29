@@ -3,6 +3,8 @@
 namespace Lsr\Core\Routing\Tests\TestCases;
 
 use Lsr\Caching\Cache;
+use Lsr\Core\Requests\Request;
+use Lsr\Core\Routing\LocalizedRoute;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 use Lsr\Enums\RequestMethod;
@@ -172,8 +174,16 @@ class RouterTest extends TestCase
 		self::assertNotEmpty($availableRoutes['loaded']['POST']);
 		self::assertNotEmpty($availableRoutes['loaded']['DELETE']);
 		self::assertNotEmpty($availableRoutes['loaded']['{id}']['GET']);
+		self::assertNotEmpty($availableRoutes['nahrano']['{id}']['GET']);
 		self::assertNotEmpty($availableRoutes['loaded']['{id}']['POST']);
 		self::assertNotEmpty($availableRoutes['settings']['POST']);
+
+		// Localized routes
+		self::assertNotEmpty($availableRoutes['settings']['GET']);
+		self::assertNotEmpty($availableRoutes['settings']['GET'][0]->localizedRoutes['cs']);
+		self::assertNotEmpty($availableRoutes['nastaveni']['GET']);
+		self::assertInstanceOf(LocalizedRoute::class, $availableRoutes['nastaveni']['GET'][0]);
+
 		self::assertNotEmpty($availableRoutes['settings']['gate']['GET']);
 		self::assertNotEmpty($availableRoutes['settings']['modes']['GET']);
 		self::assertNotEmpty($availableRoutes['settings']['modes']['{system}']['GET']);
@@ -213,8 +223,24 @@ class RouterTest extends TestCase
 	 *
 	 * @return void
 	 */
-	#[DataProvider('getPathsToCompare')] public function testComparePaths(array $path1, array $path2, bool $expected): void {
+	#[DataProvider('getPathsToCompare')]
+	public function testComparePaths(array $path1, array $path2, bool $expected): void {
 		self::assertSame($expected, Router::comparePaths($path1, $path2));
+	}
+
+	public function testLocalizedRouteRedirect() : void {
+		$request = new \Nyholm\Psr7\ServerRequest('GET', '/nahrano/10');
+
+		$params = [];
+		$route = Router::getRoute(RequestMethod::GET, ['nahrano', '10'], $params);
+		self::assertInstanceOf(LocalizedRoute::class, $route);
+		self::assertEquals(10, $params['id']);
+
+		$request = $request->withAttribute('lang', 'en')->withAttribute('id', $params['id']);
+
+		$response = $route->redirect($request);
+		self::assertEquals(300, $response->getStatusCode());
+		self::assertEquals('/loaded/10', $response->getHeaderLine('Location'));
 	}
 
 }

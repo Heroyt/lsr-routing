@@ -175,6 +175,17 @@ class RouteGroup
 		return $this;
 	}
 
+	public function localize(string $locale, string $path) : static {
+		if (!isset($this->activeRoute)) {
+			throw new RuntimeException('Cannot call RouteGroup::localize() without first creating a route in the group.');
+		}
+		if (method_exists($this->activeRoute, 'localize')) {
+			$this->activeRoute->localize($locale, $path);
+		}
+		return $this;
+
+	}
+
 	/**
 	 * @return string
 	 */

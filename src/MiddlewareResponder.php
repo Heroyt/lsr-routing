@@ -7,9 +7,10 @@ use Lsr\Core\Requests\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
+/** @phpstan-ignore trait.unused */
 trait MiddlewareResponder
 {
-	protected function respond(ServerRequestInterface $request, ErrorResponse $error) : ResponseInterface {
+	protected function respond(ServerRequestInterface $request, ErrorResponse $error): ResponseInterface {
 		$response = Response::create(403);
 
 		// Find HTTP Accept headers

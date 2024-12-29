@@ -19,7 +19,7 @@ use Throwable;
 
 class Router
 {
-	/** @var array<string, RouteInterface> Structure holding all set routes */
+	/** @var array<RouteInterface|array<RouteInterface>> Structure holding all set routes */
 	public static array $availableRoutes = [];
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
 	public static array $namedRoutes = [];
@@ -41,8 +41,8 @@ class Router
 	/**
 	 * Compare 2 different paths
 	 *
-	 * @param string[]      $path1
-	 * @param string[]|null $path2 Defaults to current request path
+	 * @param string[] $path1
+	 * @param string[] $path2 Defaults to current request path
 	 *
 	 * @return bool
 	 */
@@ -72,7 +72,7 @@ class Router
 	 * @param RequestMethod        $type   [GET, POST, DELETE, PUT]
 	 * @param string[]             $path   URL path as an array
 	 * @param array<string, mixed> $params URL parameters in a key-value array
-	 * @param string[]|null        $routes Available routes that should be processed
+	 * @param array<RouteInterface|array<RouteInterface>>|null        $routes Available routes that should be processed
 	 *
 	 * @return RouteInterface|null
 	 *
@@ -92,7 +92,7 @@ class Router
 				continue;
 			}
 
-			// Get all parameter pats available for the current path
+			// Get all parameter parts available for the current path
 			$paramRoutes = array_filter(
 				$routes,
 				static function (string $key) {
@@ -105,7 +105,6 @@ class Router
 			if (count($paramRoutes) === 1) {
 				$name = substr(array_keys($paramRoutes)[0], 1, -1); // Remove the {} symbols from the name
 				$key = array_key_first($paramRoutes);
-				assert($key !== null);
 				assert(is_array($paramRoutes[$key]));
 				$routes = $paramRoutes[$key];                       // Move into the parameter routes
 				$params[$name] = $value;                            // Set the parameter value
@@ -135,7 +134,7 @@ class Router
 		}
 
 		// Check if the request method exists for the found route
-		if (isset($routes[$type->value]) && count($routes[$type->value]) !== 0) {
+		if (isset($routes[$type->value]) && is_array($routes[$type->value]) && count($routes[$type->value]) !== 0) {
 			// Return the first
 			return reset($routes[$type->value]);
 		}
@@ -159,7 +158,6 @@ class Router
 	public function setup(): void {
 		// Cache requests
 		try {
-			/** @phpstan-ignore-next-line */
 			[self::$availableRoutes, self::$namedRoutes] = $this->cache
 				->load(
 					'routes',
@@ -180,7 +178,7 @@ class Router
 	 * Load defined routes
 	 *
 	 *
-	 * @return RouteInterface[][] [availableRoutes, namedRoutes]
+	 * @return array{0:array<RouteInterface|array<RouteInterface>>,1:array<string,RouteInterface>} [availableRoutes, namedRoutes]
 	 * @throws DuplicateNamedRouteException
 	 * @throws DuplicateRouteException
 	 * @throws ReflectionException
@@ -218,14 +216,6 @@ class Router
 		}
 
 		return [self::$availableRoutes, self::$namedRoutes];
-	}
-
-	/**
-	 * Unregister all routes
-	 */
-	public function unregisterAll(): void {
-		self::$availableRoutes = [];
-		self::$namedRoutes = [];
 	}
 
 	/**
@@ -330,11 +320,14 @@ class Router
 			if (!isset($routes[$name])) {
 				$routes[$name] = [];
 			}
+			assert(is_array($routes[$name]));
 			$routes = &$routes[$name];
 		}
 		if (!isset($routes[$type->value])) {
 			$routes[$type->value] = [];
 		}
+
+		assert(is_array($routes[$type->value]));
 		$routes = &$routes[$type->value];
 		if (isset($routes[0])) {
 			if ($routes[0]->compare($route)) {
@@ -368,68 +361,32 @@ class Router
 	}
 
 	/**
-	 * @param string         $pathString
+	 * Unregister all routes
+	 */
+	public function unregisterAll(): void {
+		self::$availableRoutes = [];
+		self::$namedRoutes = [];
+	}
+
+	/**
+	 * @param string                                                           $pathString
 	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
 	 *
 	 * @return Route
 	 * @throws DuplicateRouteException
 	 */
-	public function get(string $pathString, callable|array|RouteInterface $handler) : Route {
+	public function get(string $pathString, callable|array|RouteInterface $handler): Route {
 		return $this->route(RequestMethod::GET, $pathString, $handler);
 	}
 
 	/**
-	 * @param string         $pathString
-	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
-	 *
-	 * @return Route
-	 * @throws DuplicateRouteException
-	 */
-	public function post(string $pathString, callable|array|RouteInterface $handler) : Route {
-		return $this->route(RequestMethod::POST, $pathString, $handler);
-	}
-
-	/**
-	 * @param string         $pathString
-	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
-	 *
-	 * @return Route
-	 * @throws DuplicateRouteException
-	 */
-	public function delete(string $pathString, callable|array|RouteInterface $handler) : Route {
-		return $this->route(RequestMethod::DELETE, $pathString, $handler);
-	}
-
-	/**
-	 * @param string         $pathString
-	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
-	 *
-	 * @return Route
-	 * @throws DuplicateRouteException
-	 */
-	public function update(string $pathString, callable|array|RouteInterface $handler) : Route {
-		return $this->route(RequestMethod::UPDATE, $pathString, $handler);
-	}
-
-	/**
-	 * @param string         $pathString
-	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
-	 *
-	 * @return Route
-	 * @throws DuplicateRouteException
-	 */
-	public function put(string $pathString, callable|array|RouteInterface $handler) : Route {
-		return $this->route(RequestMethod::PUT, $pathString, $handler);
-	}
-
-	/**
-	 * @param RequestMethod                                     $method
-	 * @param string                                            $pathString
+	 * @param RequestMethod                                                    $method
+	 * @param string                                                           $pathString
 	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
 	 *
 	 * @return Route
 	 */
-	public function route(RequestMethod $method, string $pathString, callable|array|RouteInterface $handler) : Route {
+	public function route(RequestMethod $method, string $pathString, callable|array|RouteInterface $handler): Route {
 		if ($handler instanceof RouteInterface) {
 			$route = AliasRoute::createAlias($method, $pathString, $handler);
 		}
@@ -441,7 +398,51 @@ class Router
 		return $route;
 	}
 
-	public function group(string $path = '') : RouteGroup {
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function post(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::POST, $pathString, $handler);
+	}
+
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function delete(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::DELETE, $pathString, $handler);
+	}
+
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function update(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::UPDATE, $pathString, $handler);
+	}
+
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function put(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::PUT, $pathString, $handler);
+	}
+
+	public function group(string $path = ''): RouteGroup {
 		return new RouteGroup($this, $path);
 	}
 
