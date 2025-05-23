@@ -3,7 +3,6 @@
 namespace Lsr\Core\Routing\Tests\TestCases;
 
 use Lsr\Caching\Cache;
-use Lsr\Core\Requests\Request;
 use Lsr\Core\Routing\LocalizedRoute;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
@@ -38,81 +37,67 @@ class RouterTest extends TestCase
 
 	public static function getRoutes(): array {
 		return [
-			/*[
-				Route::get('/router/route', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['router', 'route'],
-				[],
-				true,
-			],
-			[
-				Route::get('/router/route', [DummyController::class, 'action']),
-				RequestMethod::POST,
-				['router', 'route'],
-				[],
-				false,
-			],
-			[
-				Route::get('/router/route/{id}', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['router', 'route', '2'],
-				['id' => '2'],
-				true,
-			],
-			[
-				Route::get('/router/param/{id}', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['router', 'param', '2'],
-				['id' => '2'],
-				true,
-			],
-			[
-				Route::post('/router/param/{id}', [DummyController::class, 'action']),
-				RequestMethod::POST,
-				['router', 'param', '2'],
-				['id' => '2'],
-				true,
-			],
-			[
-				Route::post('/router/param/{id}', [DummyController::class, 'action']),
-				RequestMethod::PUT,
-				['router', 'param', '2'],
-				['id' => '2'],
-				false,
-			],
-			[
-				Route::get('/router/route/{id}/test', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['router', 'route', '2', 'test'],
-				['id' => '2'],
-				true,
-			],
-			[
-				Route::get('/router/route/{id}/test2', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['router', 'route', '2', 'test2'],
-				['id' => '2'],
-				true,
-			],
-			[
-				Route::get('/router/route/{name}/hello', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['router', 'route', 'hello', 'hello'],
-				['name' => 'hello'],
-				true,
-			],
-			[
-				Route::get('/router/route/{id}/test2', [DummyController::class, 'action']),
-				RequestMethod::GET,
-				['invalid'],
-				[],
-				false,
-			],*/
 			[
 				self::getRouter()->get('/settings/modes/{id}/variations', [DummyController::class, 'action']),
 				RequestMethod::GET,
 				['settings', 'modes', '1', 'variations'],
 				['id' => '1'],
+				true,
+			],
+			[
+				self::getRouter()->get('[lang=cs]/optional', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['cs', 'optional'],
+				['lang' => 'cs'],
+				true,
+			],
+			[
+				self::getRouter()->get('[lang=cs]/optional', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['en', 'optional'],
+				['lang' => 'en'],
+				true,
+			],
+			[
+				self::getRouter()->get('[lang=cs]/optional', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['optional'],
+				['lang' => 'cs'],
+				true,
+			],
+			[
+				self::getRouter()->get('[lang=cs]/optional2', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['optional2'],
+				['lang' => 'cs'],
+				true,
+			],
+			[
+				self::getRouter()->get('optional-no-default/[param]/hi', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['optional-no-default', '123', 'hi'],
+				['param' => '123'],
+				true,
+			],
+			[
+				self::getRouter()->get('optional-no-default/[param]/hi', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['optional-no-default', 'hi'],
+				[],
+				true,
+			],
+			[
+				self::getRouter()->get('optional-no-default/[param]/hello', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['optional-no-default', 'hello'],
+				[],
+				true,
+			],
+			[
+				self::getRouter()->get('optional-no-default/[param]/hello', [DummyController::class, 'action']),
+				RequestMethod::GET,
+				['optional-no-default', '123', 'hello'],
+				['param' => '123'],
 				true,
 			],
 		];
@@ -207,10 +192,9 @@ class RouterTest extends TestCase
 		self::assertSame(
 			$expected,
 			$routeGot !== null && $route->compare($routeGot),
-			$method->value . ' ' . implode('/', $path) . ': ' . json_encode(
-				$routeGot,
-				JSON_THROW_ON_ERROR
-			) . PHP_EOL
+			$method->value . ' ' . implode('/', $path) . ': ' .
+			json_encode(['found' => $routeGot, 'compare' => $routeGot !== null ? $route->compare($routeGot) : null],
+			            JSON_THROW_ON_ERROR) . PHP_EOL
 		);
 		self::assertEquals($expectedParams, $params);
 	}

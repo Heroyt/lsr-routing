@@ -5,7 +5,6 @@ namespace Lsr\Core\Routing;
 
 use Lsr\Core\Requests\Response;
 use Lsr\Enums\RequestMethod;
-use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -15,7 +14,7 @@ class LocalizedRoute extends Route
 	public function __construct(
 		RequestMethod          $type,
 		public readonly string $locale,
-		public protected(set) Route $parent,
+		protected(set) Route $parent,
 	) {
 		parent::__construct($type, [$this, 'redirect']);
 	}

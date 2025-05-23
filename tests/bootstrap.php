@@ -62,6 +62,11 @@ use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 	->get('/{id}/names', [DummyController::class, 'action'])
 	->post('/{id}/names', [DummyController::class, 'action'])
 	->get('/variations', [DummyController::class, 'action']);
+
+\$this->get('[lang=cs]/optional', [DummyController::class, 'action']);
+\$this->get('[lang=cs]/optional2', [DummyController::class, 'action']);
+\$this->get('optional-no-default/[param]/hi', [DummyController::class, 'action']);
+\$this->get('optional-no-default/[param]/hello', [DummyController::class, 'action']);
 ");
 
 file_put_contents(ROOT.'src/Controllers/DummyController2.php', '.json_encode($request->request, JSON_THROW_ON_ERROR);

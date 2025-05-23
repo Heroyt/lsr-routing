@@ -1,4 +1,5 @@
 <?php
+
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 
 $this->get('/loaded', [DummyController::class, 'action'])->name('get-loaded');
@@ -25,3 +26,8 @@ $this->group('/settings')
 	->get('/{id}/names', [DummyController::class, 'action'])
 	->post('/{id}/names', [DummyController::class, 'action'])
 	->get('/variations', [DummyController::class, 'action']);
+
+$this->get('[lang=cs]/optional', [DummyController::class, 'action']);
+$this->get('[lang=cs]/optional2', [DummyController::class, 'action']);
+$this->get('optional-no-default/[param]/hi', [DummyController::class, 'action']);
+$this->get('optional-no-default/[param]/hello', [DummyController::class, 'action']);

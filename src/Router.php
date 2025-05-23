@@ -19,6 +19,8 @@ use Throwable;
 
 class Router
 {
+	protected const string PARAM_REGEX          = '/({[^}]+})\/?/';
+	protected const string OPTIONAL_PARAM_REGEX = '(\[([^[\]=]+)(?:=([^[\]]*))?\])';
 	/** @var array<RouteInterface|array<RouteInterface>> Structure holding all set routes */
 	public static array $availableRoutes = [];
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
@@ -69,10 +71,10 @@ class Router
 	/**
 	 * Get set route if it exists
 	 *
-	 * @param RequestMethod        $type   [GET, POST, DELETE, PUT]
-	 * @param string[]             $path   URL path as an array
-	 * @param array<string, mixed> $params URL parameters in a key-value array
-	 * @param array<RouteInterface|array<RouteInterface>>|null        $routes Available routes that should be processed
+	 * @param RequestMethod                                    $type   [GET, POST, DELETE, PUT]
+	 * @param string[]                                         $path   URL path as an array
+	 * @param array<string, mixed>                             $params URL parameters in a key-value array
+	 * @param array<RouteInterface|array<RouteInterface>>|null $routes Available routes that should be processed
 	 *
 	 * @return RouteInterface|null
 	 *
@@ -95,14 +97,13 @@ class Router
 			// Get all parameter parts available for the current path
 			$paramRoutes = array_filter(
 				$routes,
-				static function (string $key) {
-					return preg_match('/({[^}]+})\/?/', $key) > 0;
-				},
+				static fn(string $key) => preg_match(self::PARAM_REGEX, $key) > 0,
 				ARRAY_FILTER_USE_KEY
 			);
+			$paramRouteCount = count($paramRoutes);
 
 			// Exactly one available parameter found, set its value and move into it.
-			if (count($paramRoutes) === 1) {
+			if ($paramRouteCount === 1) {
 				$name = substr(array_keys($paramRoutes)[0], 1, -1); // Remove the {} symbols from the name
 				$key = array_key_first($paramRoutes);
 				assert(is_array($paramRoutes[$key]));
@@ -112,7 +113,7 @@ class Router
 			}
 
 			// More than one parameter found → check all possible paths
-			if (count($paramRoutes) > 1) {
+			if ($paramRouteCount > 1) {
 				foreach ($paramRoutes as $paramKey => $paramRoute) {
 					$name = substr($paramKey, 1, -1);
 					assert(is_array($paramRoute));
@@ -129,8 +130,37 @@ class Router
 				}
 			}
 
+			// No parameter found → check if there are any optional parameters
+			$optionalParams = array_filter(
+				$routes,
+				static fn(string $key) => preg_match(self::OPTIONAL_PARAM_REGEX, $key) > 0,
+				ARRAY_FILTER_USE_KEY
+			);
+			foreach ($optionalParams as $key => $paramRoutes) {
+				$route = self::tryOptionalParam($type, $path, $params, $key, $value, $paramRoutes, $counter);
+				if (isset($route)) { // Found
+					return $route;
+				}
+			}
+
 			// No route found
 			return null;
+		}
+
+		// Check optional parameters at the end of the path
+		$optionalParams = array_filter(
+			$routes,
+			static fn(string $key) => preg_match(self::OPTIONAL_PARAM_REGEX, $key) > 0,
+			ARRAY_FILTER_USE_KEY
+		);
+		foreach ($optionalParams as $key => $paramRoutes) {
+			try {
+				$route = self::tryOptionalParam($type, [], $params, $key, null, $paramRoutes, $counter);
+				if (isset($route)) { // Found
+					return $route;
+				}
+			} catch (MethodNotAllowedException) {
+			}
 		}
 
 		// Check if the request method exists for the found route
@@ -143,6 +173,60 @@ class Router
 		throw new MethodNotAllowedException(
 			'Method ' . $type->value . ' is not allowed for path /' . implode('/', $path)
 		);
+	}
+
+	/**
+	 * @param RequestMethod                 $type
+	 * @param string[]                      $path
+	 * @param array<string,mixed>           $params
+	 * @param string                        $key
+	 * @param string|null                   $value
+	 * @param array<string, RouteInterface> $paramRoutes
+	 * @param int                           $counter
+	 *
+	 * @return RouteInterface|null
+	 */
+	protected static function tryOptionalParam(RequestMethod $type, array $path, array &$params, string $key, ?string $value, array $paramRoutes, int $counter): ?RouteInterface {
+		// Extract data from param
+		preg_match(self::OPTIONAL_PARAM_REGEX, $key, $matches);
+		$name = $matches[1];
+
+		// Try to set the optional param
+		if ($value !== null) {
+			$params[$name] = $value; // Set the parameter value
+		}
+
+		// Recurse
+		try {
+			$route = self::getRoute($type, array_slice($path, $counter), $params, $paramRoutes);
+			if (isset($route)) { // Found
+				return $route;
+			}
+		} catch (MethodNotAllowedException) {
+		}
+		// Not found → the parameter was invalid → remove the parameter value and try the next parameter.
+		unset($params[$name]);
+
+		if (isset($matches[2])) {
+			$params[$name] = $matches[2];
+		}
+		try {
+			$route = self::getRoute($type, $path, $params, $paramRoutes);
+			if (isset($route)) {
+				return $route;
+			}
+		} catch (MethodNotAllowedException) {
+		}
+
+		try {
+			$route = self::getRoute($type, array_slice($path, 1), $params, $paramRoutes);
+			if (isset($route)) {
+				return $route;
+			}
+		} catch (MethodNotAllowedException) {
+		}
+		unset($params[$name]);
+		return null;
 	}
 
 	/**
