@@ -191,6 +191,17 @@ class Router
 		preg_match(self::OPTIONAL_PARAM_REGEX, $key, $matches);
 		$name = $matches[1];
 
+		if (isset($matches[2])) {
+			$params[$name] = $matches[2];
+		}
+		try {
+			$route = self::getRoute($type, $path, $params, $paramRoutes);
+			if (isset($route)) {
+				return $route;
+			}
+		} catch (MethodNotAllowedException) {
+		}
+
 		// Try to set the optional param
 		if ($value !== null) {
 			$params[$name] = $value; // Set the parameter value
@@ -207,17 +218,10 @@ class Router
 		// Not found → the parameter was invalid → remove the parameter value and try the next parameter.
 		unset($params[$name]);
 
+
 		if (isset($matches[2])) {
 			$params[$name] = $matches[2];
 		}
-		try {
-			$route = self::getRoute($type, $path, $params, $paramRoutes);
-			if (isset($route)) {
-				return $route;
-			}
-		} catch (MethodNotAllowedException) {
-		}
-
 		try {
 			$route = self::getRoute($type, array_slice($path, 1), $params, $paramRoutes);
 			if (isset($route)) {
