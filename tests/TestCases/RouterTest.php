@@ -227,4 +227,79 @@ class RouterTest extends TestCase
 		self::assertEquals('/loaded/10', $response->getHeaderLine('Location'));
 	}
 
+	#[Depends('testLoadRoutes')]
+	public function testValidatedOptionalRoutes(): void {
+		$method = RequestMethod::GET;
+
+		$params = [];
+		$route = Router::getRoute($method, ['validated'], $params);
+		self::assertNotNull($route);
+		self::assertEquals(['lang' => 'cs'], $params); // Default lang is 'cs'
+
+		// Test valid values
+		foreach (['cs', 'en', 'de'] as $lang) {
+			$params = [];
+			$route = Router::getRoute($method, ['validated', $lang], $params);
+			self::assertNotNull($route);
+			self::assertEquals(['lang' => $lang], $params);
+
+			$params = [];
+			$route = Router::getRoute($method, ['validated', $lang, 'optional'], $params);
+			self::assertNotNull($route);
+			self::assertEquals(['lang' => $lang], $params);
+
+			$params = [];
+			$route = Router::getRoute($method, ['validated', $lang, 'optional2'], $params);
+			self::assertNotNull($route);
+			self::assertEquals(['lang' => $lang], $params);
+		}
+
+		// Test invalid values
+		foreach (['1', 'abcd', 'hello', 'sk'] as $lang) {
+			$params = [];
+			$route = Router::getRoute($method, ['validated', $lang], $params);
+			self::assertNull(
+				$route,
+				'Invalid lang should not match: ' . $lang . ', with parameters: ' . json_encode($params)
+			);
+			self::assertEmpty($params);
+
+			$params = [];
+			$route = Router::getRoute($method, ['validated', $lang, 'optional'], $params);
+			self::assertNull(
+				$route,
+				'Invalid lang should not match: ' . $lang . ', with parameters: ' . json_encode($params)
+			);
+			self::assertEmpty($params);
+
+			$params = [];
+			$route = Router::getRoute($method, ['validated', $lang, 'optional2'], $params);
+			self::assertNull(
+				$route,
+				'Invalid lang should not match: ' . $lang . ', with parameters: ' . json_encode($params)
+			);
+			self::assertEmpty($params);
+		}
+	}
+
+	public function testValidatedRequiredRoutes(): void {
+		$method = RequestMethod::GET;
+
+		// Test numeric IDs
+		foreach (['1', '2', '99', 8] as $param) {
+			$params = [];
+			$route = Router::getRoute($method, ['validated2', $param], $params);
+			self::assertNotNull($route);
+			self::assertEquals(['id' => $param], $params);
+		}
+
+		// Test non-numeric IDs
+		foreach (['abc', '1a', '2b', '99c'] as $param) {
+			$params = [];
+			$route = Router::getRoute($method, ['validated2', $param], $params);
+			self::assertNotNull($route);
+			self::assertEquals(['slug' => $param], $params);
+		}
+	}
+
 }

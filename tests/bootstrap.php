@@ -35,7 +35,10 @@ foreach (array_merge(glob(TMP_DIR.'*.php'), glob(TMP_DIR.'di/*')) as $file) {
 
 require_once ROOT.'../vendor/autoload.php';
 
-file_put_contents(ROOT.'routes/test.php', "<?php
+file_put_contents(
+	ROOT . 'routes/test.php',
+	<<<PHP
+<?php
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 
 \$this->get('/loaded', [DummyController::class, 'action'])->name('get-loaded');
@@ -67,7 +70,37 @@ use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 \$this->get('[lang=cs]/optional2', [DummyController::class, 'action']);
 \$this->get('optional-no-default/[param]/hi', [DummyController::class, 'action']);
 \$this->get('optional-no-default/[param]/hello', [DummyController::class, 'action']);
-");
+
+\$langValidator = new class implements \Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface {
+
+	public function validate(mixed \$value): bool {
+		return in_array(\$value, ['cs', 'en', 'de'], true);
+	}
+
+};
+
+// Routes with validated parameters
+\$this->group('validated')
+	  ->param('lang', \$langValidator)
+	  ->get('[lang=cs]', [DummyController::class, 'action'])
+	  ->get('[lang=cs]/optional', [DummyController::class, 'action'])
+	  ->get('[lang=cs]/optional2', [DummyController::class, 'action'])
+	  ->get('test', [DummyController::class, 'action']);
+	  
+\$numericValidator = new class implements \Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface {
+
+	public function validate(mixed \$value): bool {
+		return is_numeric(\$value);
+	}
+
+};
+
+\$this->group('validated2')
+	  ->get('{id}', [DummyController::class, 'action'])->param('id', \$numericValidator) // Only numeric IDs
+	  ->get('{slug}', [DummyController::class, 'action']); // Fallback route without validation
+	  
+PHP
+);
 
 file_put_contents(ROOT.'src/Controllers/DummyController2.php', '.json_encode($request->request, JSON_THROW_ON_ERROR);
 	}
