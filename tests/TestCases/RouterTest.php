@@ -4,6 +4,7 @@ namespace Lsr\Core\Routing\Tests\TestCases;
 
 use Lsr\Caching\Cache;
 use Lsr\Core\Routing\LocalizedRoute;
+use Lsr\Core\Routing\RouteParameter;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 use Lsr\Enums\RequestMethod;
@@ -176,6 +177,28 @@ class RouterTest extends TestCase
 		self::assertNotEmpty($namedRoutes['delete-loaded']);
 	}
 
+	#[Depends('testLoadRoutes')]
+	public function testLoadValidatedRoutes(): void {
+		self::assertNotEmpty(Router::$availableRoutes['validated']);
+		self::assertNotEmpty(Router::$availableRoutes['validated']['[lang=cs]']);
+		self::assertInstanceOf(RouteParameter::class, Router::$availableRoutes['validated']['[lang=cs]']);
+
+		// Check that the validator is registered
+		self::assertCount(1, Router::$availableRoutes['validated']['[lang=cs]']->validators);
+
+
+		self::assertNotEmpty(Router::$availableRoutes['validated2']);
+		self::assertNotEmpty(Router::$availableRoutes['validated2']['{id}']);
+		self::assertInstanceOf(RouteParameter::class, Router::$availableRoutes['validated2']['{id}']);
+		// Check that the validator is registered
+		self::assertCount(1, Router::$availableRoutes['validated2']['{id}']->validators);
+
+		self::assertNotEmpty(Router::$availableRoutes['validated2']['{slug}']);
+		self::assertInstanceOf(RouteParameter::class, Router::$availableRoutes['validated2']['{slug}']);
+		// Check that no validator is registered
+		self::assertCount(0, Router::$availableRoutes['validated2']['{slug}']->validators);
+	}
+
 	/**
 	 * @param RouteInterface $route
 	 * @param RequestMethod $method
@@ -227,7 +250,7 @@ class RouterTest extends TestCase
 		self::assertEquals('/loaded/10', $response->getHeaderLine('Location'));
 	}
 
-	#[Depends('testLoadRoutes')]
+	#[Depends('testLoadValidatedRoutes')]
 	public function testValidatedOptionalRoutes(): void {
 		$method = RequestMethod::GET;
 
@@ -282,6 +305,7 @@ class RouterTest extends TestCase
 		}
 	}
 
+	#[Depends('testLoadValidatedRoutes')]
 	public function testValidatedRequiredRoutes(): void {
 		$method = RequestMethod::GET;
 
