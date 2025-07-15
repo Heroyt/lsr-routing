@@ -17,11 +17,16 @@ use ReflectionException;
 use RegexIterator;
 use Throwable;
 
+/**
+ * @phpstan-type RouteNode RouteInterface|RouteParameter|array<string, RouteNode>
+ */
 class Router
 {
-	protected const string PARAM_REGEX          = '/({[^}]+})\/?/';
-	protected const string OPTIONAL_PARAM_REGEX = '(\[([^[\]=]+)(?:=([^[\]]*))?\])';
-	/** @var array<RouteInterface|array<RouteInterface>> Structure holding all set routes */
+	protected const string PARAM_REGEX          = '({(?P<name>[^}]+)})\/?';
+	protected const string OPTIONAL_PARAM_REGEX = '(\[(?P<optname>[^[\]=]+)(?:=(?P<default>[^[\]]*))?])';
+
+	protected const string ANY_PARAM_REGEX = '(?:' . self::PARAM_REGEX . ')|(?:' . self::OPTIONAL_PARAM_REGEX . ')';
+	/** @var array<string, RouteNode> Structure holding all set routes */
 	public static array $availableRoutes = [];
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
 	public static array $namedRoutes = [];
@@ -87,9 +92,10 @@ class Router
 
 		$counter = 0;
 		foreach ($path as $value) {
+			assert(is_array($routes));
 			$counter++;
 			// Check if path key exists and if it does, move into it.
-			if (isset($routes[$value]) && is_array($routes[$value])) {
+			if (isset($routes[$value])) {
 				$routes = $routes[$value];
 				continue;
 			}
@@ -97,28 +103,47 @@ class Router
 			// Get all parameter parts available for the current path
 			$paramRoutes = array_filter(
 				$routes,
-				static fn(string $key) => preg_match(self::PARAM_REGEX, $key) > 0,
-				ARRAY_FILTER_USE_KEY
+				static fn($node) => $node instanceof RouteParameter,
+
 			);
 			$paramRouteCount = count($paramRoutes);
 
-			// Exactly one available parameter found, set its value and move into it.
+			// Exactly one available parameter found
 			if ($paramRouteCount === 1) {
-				$name = substr(array_keys($paramRoutes)[0], 1, -1); // Remove the {} symbols from the name
 				$key = array_key_first($paramRoutes);
-				assert(is_array($paramRoutes[$key]));
-				$routes = $paramRoutes[$key];                       // Move into the parameter routes
+				$paramRoute = $paramRoutes[$key];
+				assert($paramRoute instanceof RouteParameter);
+				$name = $paramRoute->name;
+
+				if ($paramRoute->optional) {
+					$route = self::tryOptionalParam($type, $path, $params, $paramRoute, $value, $counter);
+					if (isset($route)) { // Found
+						return $route;
+					}
+					continue;
+				}
+
+				// Required parameter - set value and move into it.
+				$routes = $paramRoute->routes;                       // Move into the parameter routes
 				$params[$name] = $value;                            // Set the parameter value
 				continue;
 			}
 
 			// More than one parameter found → check all possible paths
 			if ($paramRouteCount > 1) {
-				foreach ($paramRoutes as $paramKey => $paramRoute) {
-					$name = substr($paramKey, 1, -1);
-					assert(is_array($paramRoute));
-					$routes = $paramRoute;
-					$params[$name] = $value;
+				foreach ($paramRoutes as $paramRoute) {
+					assert($paramRoute instanceof RouteParameter);
+
+					if ($paramRoute->optional) {
+						$route = self::tryOptionalParam($type, $path, $params, $paramRoute, $value, $counter);
+						if (isset($route)) { // Found
+							return $route;
+						}
+						continue;
+					}
+
+					$routes = $paramRoute->routes;
+					$params[$paramRoute->name] = $value;
 
 					// Recurse
 					$route = self::getRoute($type, array_slice($path, $counter), $params, $routes);
@@ -126,20 +151,7 @@ class Router
 						return $route;
 					}
 					// Not found → the parameter was invalid → remove the parameter value and try the next parameter.
-					unset($params[$name]);
-				}
-			}
-
-			// No parameter found → check if there are any optional parameters
-			$optionalParams = array_filter(
-				$routes,
-				static fn(string $key) => preg_match(self::OPTIONAL_PARAM_REGEX, $key) > 0,
-				ARRAY_FILTER_USE_KEY
-			);
-			foreach ($optionalParams as $key => $paramRoutes) {
-				$route = self::tryOptionalParam($type, $path, $params, $key, $value, $paramRoutes, $counter);
-				if (isset($route)) { // Found
-					return $route;
+					unset($params[$paramRoute->name]);
 				}
 			}
 
@@ -150,12 +162,11 @@ class Router
 		// Check optional parameters at the end of the path
 		$optionalParams = array_filter(
 			$routes,
-			static fn(string $key) => preg_match(self::OPTIONAL_PARAM_REGEX, $key) > 0,
-			ARRAY_FILTER_USE_KEY
+			static fn($node) => $node instanceof RouteParameter && $node->optional,
 		);
-		foreach ($optionalParams as $key => $paramRoutes) {
+		foreach ($optionalParams as $paramRoutes) {
 			try {
-				$route = self::tryOptionalParam($type, [], $params, $key, null, $paramRoutes, $counter);
+				$route = self::tryOptionalParam($type, [], $params, $paramRoutes, null, $counter);
 				if (isset($route)) { // Found
 					return $route;
 				}
@@ -176,26 +187,24 @@ class Router
 	}
 
 	/**
-	 * @param RequestMethod                 $type
-	 * @param string[]                      $path
-	 * @param array<string,mixed>           $params
-	 * @param string                        $key
-	 * @param string|null                   $value
-	 * @param array<string, RouteInterface> $paramRoutes
-	 * @param int                           $counter
+	 * @param RequestMethod       $type
+	 * @param string[]            $path
+	 * @param array<string,mixed> $params
+	 * @param RouteParameter      $routeParam
+	 * @param string|null         $value
+	 * @param int                 $counter
 	 *
 	 * @return RouteInterface|null
 	 */
-	protected static function tryOptionalParam(RequestMethod $type, array $path, array &$params, string $key, ?string $value, array $paramRoutes, int $counter): ?RouteInterface {
+	protected static function tryOptionalParam(RequestMethod $type, array $path, array &$params, RouteParameter $routeParam, ?string $value, int $counter): ?RouteInterface {
 		// Extract data from param
-		preg_match(self::OPTIONAL_PARAM_REGEX, $key, $matches);
-		$name = $matches[1];
+		$name = $routeParam->name;
 
-		if (isset($matches[2])) {
-			$params[$name] = $matches[2];
+		if (!empty($routeParam->default)) {
+			$params[$name] = $routeParam->default;
 		}
 		try {
-			$route = self::getRoute($type, $path, $params, $paramRoutes);
+			$route = self::getRoute($type, $path, $params, $routeParam->routes);
 			if (isset($route)) {
 				return $route;
 			}
@@ -209,7 +218,7 @@ class Router
 
 		// Recurse
 		try {
-			$route = self::getRoute($type, array_slice($path, $counter), $params, $paramRoutes);
+			$route = self::getRoute($type, array_slice($path, $counter), $params, $routeParam->routes);
 			if (isset($route)) { // Found
 				return $route;
 			}
@@ -223,7 +232,7 @@ class Router
 			$params[$name] = $matches[2];
 		}
 		try {
-			$route = self::getRoute($type, array_slice($path, 1), $params, $paramRoutes);
+			$route = self::getRoute($type, array_slice($path, 1), $params, $routeParam->routes);
 			if (isset($route)) {
 				return $route;
 			}
@@ -403,21 +412,57 @@ class Router
 	public function register(RouteInterface $route): void {
 		$routes = &self::$availableRoutes;
 		$type = $route->getMethod();
+
+		// Walk through the path and create a nested array structure
 		foreach ($route->getPath() as $name) {
-			$name = strtolower($name);
-			if (!isset($routes[$name])) {
-				$routes[$name] = [];
+			$isParam = preg_match('/' . self::ANY_PARAM_REGEX . '/', $name, $matches) > 0;
+			$paramName = $matches['name'] ?? '';
+			if (empty($paramName)) {
+				$paramName = $matches['optname'] ?? '';
 			}
-			assert(is_array($routes[$name]));
-			$routes = &$routes[$name];
+			$lowerName = strtolower($name);
+
+			// Create a new branch in the radix tree of routes
+			if (!isset($routes[$lowerName])) {
+				if ($isParam) {
+					// Create parameter route
+					$routes[$lowerName] = new RouteParameter(
+						          $paramName,
+						optional: !empty($matches['optname']),
+						default : $matches['default'] ?? null,
+					);
+				}
+				else {
+					// Create normal route
+					$routes[$lowerName] = [];
+				}
+			}
+			assert(is_array($routes[$lowerName]) || $routes[$lowerName] instanceof RouteParameter);
+			if ($routes[$lowerName] instanceof RouteParameter) {
+				// Maybe add validators
+				if ($route instanceof Route && isset($route->paramValidators[$paramName])) {
+					$routes[$lowerName]->addValidators(...$route->paramValidators[$paramName]);
+				}
+				$routes = &$routes[$lowerName]->routes;
+			}
+			elseif (is_array($routes[$lowerName])) {
+				$routes = &$routes[$lowerName];
+			}
 		}
+
+		// Create a pre-leaf node in the radix tree for the route for the HTTP method.
 		if (!isset($routes[$type->value])) {
 			$routes[$type->value] = [];
 		}
 
-		assert(is_array($routes[$type->value]));
-		$routes = &$routes[$type->value];
-		if (isset($routes[0])) {
+		if (is_array($routes[$type->value])) {
+			$routes = &$routes[$type->value];
+		}
+		elseif ($routes[$type->value] instanceof RouteParameter) {
+			$routes = &$routes[$type->value]->routes;
+		}
+
+		if (isset($routes[0]) && $routes[0] instanceof RouteInterface) {
 			if ($routes[0]->compare($route)) {
 				return;
 			}

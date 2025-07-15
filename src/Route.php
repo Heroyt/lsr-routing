@@ -10,6 +10,7 @@ namespace Lsr\Core\Routing;
 use Closure;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
+use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 
@@ -28,7 +29,12 @@ class Route implements RouteInterface
 	/**
 	 * @var array<string, RouteInterface>
 	 */
-	public protected(set) array $localizedRoutes  = [];
+	public protected(set) array $localizedRoutes = [];
+
+	/**
+	 * @var array<non-empty-string,RouteParamValidatorInterface[]>
+	 */
+	public protected(set) array $paramValidators = [];
 
 	protected ?Router $router = null;
 
@@ -36,7 +42,7 @@ class Route implements RouteInterface
 	/**
 	 * Route constructor.
 	 *
-	 * @param RequestMethod                                     $type
+	 * @param RequestMethod $type
 	 * @param callable-string|array{0: class-string|object, 1: string}|Closure $handler
 	 */
 	public function __construct(
@@ -195,11 +201,6 @@ class Route implements RouteInterface
 		return $this->readablePath;
 	}
 
-	public function setRouter(Router $router): Route {
-		$this->router = $router;
-		return $this;
-	}
-
 	/**
 	 * @param string $locale
 	 * @param string $path
@@ -212,6 +213,24 @@ class Route implements RouteInterface
 		$route->setRouter($this->router);
 		$this->router->register($route);
 		$this->localizedRoutes[$locale] = $route;
+		return $this;
+	}
+
+	public function setRouter(Router $router): Route {
+		$this->router = $router;
+		return $this;
+	}
+
+	/**
+	 * Setup a route parameter validator.
+	 *
+	 * @param non-empty-string             $name
+	 * @param RouteParamValidatorInterface ...$validators
+	 *
+	 * @return $this
+	 */
+	public function param(string $name, RouteParamValidatorInterface ...$validators): Route {
+		$this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
 		return $this;
 	}
 }

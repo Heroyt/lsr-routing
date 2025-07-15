@@ -2,6 +2,7 @@
 
 namespace Lsr\Core\Routing;
 
+use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use RuntimeException;
@@ -17,6 +18,11 @@ class RouteGroup
 	protected array $middleware = [];
 	/** @var array<string, RouteGroup> */
 	protected array $groups = [];
+
+	/**
+	 * @var array<non-empty-string,RouteParamValidatorInterface[]>
+	 */
+	public protected(set) array $paramValidators = [];
 
 	public function __construct(
 		protected readonly Router $router,
@@ -52,6 +58,9 @@ class RouteGroup
 		$route = $this->router->route($method, $this->combinePaths($path), $handler);
 		// Add an already added middleware to the route
 		$route->middleware(...$this->middleware);
+		foreach ($this->paramValidators as $name => $validators) {
+			$route->param($name, ...$validators);
+		}
 		// Save route
 		$this->routes[$method->value.':'.$path] = $route;
 		// Set route as active
@@ -217,6 +226,32 @@ class RouteGroup
 			throw new RuntimeException('Cannot end group, because it has no parent.');
 		}
 		return $this->parent;
+	}
+
+	/**
+	 * Setup a route parameter validator.
+	 *
+	 * @param non-empty-string             $name
+	 * @param RouteParamValidatorInterface ...$validators
+	 *
+	 * @return $this
+	 */
+	public function param(string $name, RouteParamValidatorInterface ...$validators): RouteGroup {
+		if (isset($this->activeRoute)) {
+			$this->activeRoute->param($name, ...$validators);
+			return $this;
+		}
+
+		$this->paramAll($name, ...$validators);
+		return $this;
+	}
+
+	public function paramAll(string $name, RouteParamValidatorInterface ...$validators): RouteGroup {
+		$this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
+		foreach ($this->routes as $route) {
+			$route->param($name, ...$validators);
+		}
+		return $this;
 	}
 
 }
