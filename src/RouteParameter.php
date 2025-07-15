@@ -54,6 +54,9 @@ class RouteParameter implements ArrayAccess, Stringable
 		return true;
 	}
 
+	/**
+	 * Adds new validators for the parameter. Checks for duplicates.
+	 */
 	public function addValidators(RouteParamValidatorInterface ...$validators): void {
 		foreach ($validators as $validator) {
 			if (!in_array($validator, $this->validators, true)) {

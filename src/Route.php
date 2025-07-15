@@ -231,6 +231,7 @@ class Route implements RouteInterface
 	 */
 	public function param(string $name, RouteParamValidatorInterface ...$validators): Route {
 		$this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
+		$this->router?->addParameterValidators($this); // Register the validators in the router if it exists
 		return $this;
 	}
 }

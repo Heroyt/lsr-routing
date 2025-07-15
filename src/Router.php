@@ -113,6 +113,13 @@ class Router
 				$key = array_key_first($paramRoutes);
 				$paramRoute = $paramRoutes[$key];
 				assert($paramRoute instanceof RouteParameter);
+
+				// Validate the parameter value - if invalid, treat as not found.
+				if (!$paramRoute->validate($value)) {
+					// No route found
+					return null;
+				}
+
 				$name = $paramRoute->name;
 
 				if ($paramRoute->optional) {
@@ -133,6 +140,10 @@ class Router
 			if ($paramRouteCount > 1) {
 				foreach ($paramRoutes as $paramRoute) {
 					assert($paramRoute instanceof RouteParameter);
+
+					if (!$paramRoute->validate($value)) {
+						continue; // Invalid parameter value → skip
+					}
 
 					if ($paramRoute->optional) {
 						$route = self::tryOptionalParam($type, $path, $params, $paramRoute, $value, $counter);
@@ -165,6 +176,8 @@ class Router
 			static fn($node) => $node instanceof RouteParameter && $node->optional,
 		);
 		foreach ($optionalParams as $paramRoutes) {
+			assert($paramRoutes instanceof RouteParameter);
+			// No need to validate, because only the default value is used, and we assume it is valid.
 			try {
 				$route = self::tryOptionalParam($type, [], $params, $paramRoutes, null, $counter);
 				if (isset($route)) { // Found
@@ -469,6 +482,30 @@ class Router
 			throw new DuplicateRouteException($routes[0], $route);
 		}
 		$routes[0] = $route;
+	}
+
+	public function addParameterValidators(Route $route): void {
+		// Go through route's path and add validators to all found parameters
+		$routes = self::$availableRoutes;
+		foreach ($route->getPath() as $part) {
+			if (!isset($routes[$part])) {
+				throw new \RuntimeException('Route part was not found. Is the route registered?');
+			}
+
+			$next = $routes[$part];
+
+			if ($next instanceof RouteParameter) {
+				// Add validators to the parameter
+				if (isset($route->paramValidators[$next->name])) {
+					$next->addValidators(...$route->paramValidators[$next->name]);
+				}
+
+				$routes = $next->routes;
+				continue;
+			}
+
+			$routes = $next;
+		}
 	}
 
 	/**
