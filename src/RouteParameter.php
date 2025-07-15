@@ -4,18 +4,21 @@ declare(strict_types=1);
 namespace Lsr\Core\Routing;
 
 use ArrayAccess;
+use Countable;
+use Iterator;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Stringable;
 
 /**
  * @phpstan-import-type RouteNode from Router
+ * @implements Iterator<string, RouteNode>
  */
-class RouteParameter implements ArrayAccess, Stringable
+class RouteParameter implements ArrayAccess, Stringable, Countable, Iterator
 {
 
 	/**
 	 * @param string                         $name
-	 * @param RouteNode                      $routes
+	 * @param array<string,RouteNode> $routes
 	 * @param RouteParamValidatorInterface[] $validators
 	 */
 	public function __construct(
@@ -47,6 +50,10 @@ class RouteParameter implements ArrayAccess, Stringable
 		return $this->name;
 	}
 
+	public function count(): int {
+		return count($this->routes);
+	}
+
 	public function validate(mixed $value): bool {
 		if (array_any($this->validators, static fn($validator) => !$validator->validate($value))) {
 			return false;
@@ -63,5 +70,25 @@ class RouteParameter implements ArrayAccess, Stringable
 				$this->validators[] = $validator;
 			}
 		}
+	}
+
+	public function current(): mixed {
+		return current($this->routes);
+	}
+
+	public function next(): void {
+		next($this->routes);
+	}
+
+	public function key(): mixed {
+		return key($this->routes);
+	}
+
+	public function valid(): bool {
+		return key($this->routes) !== null;
+	}
+
+	public function rewind(): void {
+		reset($this->routes);
 	}
 }
