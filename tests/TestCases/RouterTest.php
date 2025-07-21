@@ -285,7 +285,7 @@ class RouterTest extends TestCase
 				$route,
 				'Invalid lang should not match: ' . $lang . ', with parameters: ' . json_encode($params)
 			);
-			self::assertEmpty($params);
+			self::assertEquals(['lang' => 'cs'], $params);
 
 			$params = [];
 			$route = Router::getRoute($method, ['validated', $lang, 'optional'], $params);
@@ -293,7 +293,7 @@ class RouterTest extends TestCase
 				$route,
 				'Invalid lang should not match: ' . $lang . ', with parameters: ' . json_encode($params)
 			);
-			self::assertEmpty($params);
+			self::assertEquals(['lang' => 'cs'], $params);
 
 			$params = [];
 			$route = Router::getRoute($method, ['validated', $lang, 'optional2'], $params);
@@ -301,7 +301,7 @@ class RouterTest extends TestCase
 				$route,
 				'Invalid lang should not match: ' . $lang . ', with parameters: ' . json_encode($params)
 			);
-			self::assertEmpty($params);
+			self::assertEquals(['lang' => 'cs'], $params);
 		}
 	}
 

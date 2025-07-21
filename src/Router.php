@@ -114,12 +114,6 @@ class Router
 				$paramRoute = $paramRoutes[$key];
 				assert($paramRoute instanceof RouteParameter);
 
-				// Validate the parameter value - if invalid, treat as not found.
-				if (!$paramRoute->validate($value)) {
-					// No route found
-					return null;
-				}
-
 				$name = $paramRoute->name;
 
 				if ($paramRoute->optional) {
@@ -127,13 +121,19 @@ class Router
 					if (isset($route)) { // Found
 						return $route;
 					}
+				}
+				else {
+					// Validate the parameter value - if invalid, treat as not found.
+					if (!$paramRoute->validate($value)) {
+						// No route found
+						return null;
+					}
+
+					// Required parameter - set value and move into it.
+					$routes = $paramRoute->routes;                       // Move into the parameter routes
+					$params[$name] = $value;                             // Set the parameter value
 					continue;
 				}
-
-				// Required parameter - set value and move into it.
-				$routes = $paramRoute->routes;                       // Move into the parameter routes
-				$params[$name] = $value;                            // Set the parameter value
-				continue;
 			}
 
 			// More than one parameter found → check all possible paths
@@ -222,6 +222,11 @@ class Router
 				return $route;
 			}
 		} catch (MethodNotAllowedException) {
+		}
+
+		if ($value !== null && !$routeParam->validate($value)) {
+			// Invalid parameter value → skip
+			return null;
 		}
 
 		// Try to set the optional param
