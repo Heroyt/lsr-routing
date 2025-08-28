@@ -1,7 +1,7 @@
 {
   "name": "lsr/routing",
   "description": "Laser framework core - Routing.",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "repositories": [
     {
       "type": "composer",
@@ -48,7 +48,8 @@
     "lsr/cache": "^0.3.0",
     "lsr/helpers": "^0.3.0",
     "lsr/request": "^0.3.0",
-    "nette/di": "^3.2"
+    "nette/di": "^3.2",
+    "laravel/serializable-closure": "^2.0"
   },
   "extra": {
     "branch-alias": {

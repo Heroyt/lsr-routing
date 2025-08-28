@@ -8,6 +8,7 @@ namespace Lsr\Core\Routing;
 
 
 use Closure;
+use Laravel\SerializableClosure\SerializableClosure;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
@@ -18,25 +19,30 @@ class Route implements RouteInterface
 {
 
 	/** @var string[] Current URL path as an array (exploded using the "/") */
-	public protected(set) array $path = [];
+	protected(set) array $path = [];
 	/** @var string URL in a string format */
-	public protected(set) string $readablePath = '';
+	protected(set) string $readablePath = '';
 
 	/** @var Middleware[] Route's middleware objects */
 	public array                 $middleware = [];
-	public protected(set) string $routeName  = '';
+	protected(set) string $routeName    = '';
 
 	/**
 	 * @var array<string, RouteInterface>
 	 */
-	public protected(set) array $localizedRoutes = [];
+	protected(set) array $localizedRoutes = [];
 
 	/**
 	 * @var array<non-empty-string,RouteParamValidatorInterface[]>
 	 */
-	public protected(set) array $paramValidators = [];
+	protected(set) array $paramValidators = [];
 
 	protected ?Router $router = null;
+
+	/**
+	 * @var callable-string|array{0: class-string|object, 1: string}|SerializableClosure
+	 */
+	protected(set) string|array|SerializableClosure $handler;
 
 
 	/**
@@ -47,8 +53,14 @@ class Route implements RouteInterface
 	 */
 	public function __construct(
 		protected(set) RequestMethod $type,
-		protected(set) string|array|Closure $handler
+		string|array|Closure $handler,
 	) {
+		if ($handler instanceof Closure) {
+			$this->handler = new SerializableClosure($handler);
+		}
+		else {
+			$this->handler = $handler;
+		}
 	}
 
 	/**
@@ -189,6 +201,9 @@ class Route implements RouteInterface
 	 * @return array{0: class-string|object, 1: string}|callable
 	 */
 	public function getHandler(): callable|array {
+		if ($this->handler instanceof SerializableClosure) {
+			return $this->handler->getClosure();
+		}
 		return $this->handler;
 	}
 

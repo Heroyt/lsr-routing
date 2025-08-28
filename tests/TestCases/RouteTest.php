@@ -6,11 +6,12 @@ use Lsr\Caching\Cache;
 use Lsr\Core\Requests\Request;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
+use Lsr\Core\Routing\Exceptions\MethodNotAllowedException;
 use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
-use Lsr\Core\Routing\Tests\Mockup\Models\TestModel;
 use Lsr\Core\Routing\Tests\Mockup\Model2;
+use Lsr\Core\Routing\Tests\Mockup\Models\TestModel;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Nette\Caching\Storages\DevNullStorage;
@@ -54,26 +55,37 @@ class RouteTest extends TestCase
 	}
 
 	/**
-	 * @return array{0:RequestMethod,1:string,2:string[]}[][]
+	 * @return iterable<string, array{0:RequestMethod,1:string,2:string[],3:callable}[]>
 	 */
-	public static function getCreateRoutes(): array {
-		return [
+	public static function getCreateRoutes(): iterable {
+		$routes = [
 			[
-				RequestMethod::POST,
-				'/aaa',
-				['aaa'],
+				'method'     => RequestMethod::POST,
+				'route'      => '/aaa',
+				'routeArray' => ['aaa'],
 			],
 			[
-				RequestMethod::UPDATE,
-				'/test/bbb',
-				['test', 'bbb'],
+				'method'     => RequestMethod::UPDATE,
+				'route'      => '/test/bbb',
+				'routeArray' => ['test', 'bbb'],
 			],
 			[
-				RequestMethod::GET,
-				'/test/hey',
-				['test', 'hey'],
+				'method'     => RequestMethod::GET,
+				'route'      => '/test/hey',
+				'routeArray' => ['test', 'hey'],
 			],
 		];
+
+		foreach (self::getRouteCallbacks() as $key => $callback) {
+			foreach ($routes as $route) {
+				yield $key . '-' . $route['route'] => [
+					$route['method'],
+					$route['route'],
+					$route['routeArray'],
+					$callback['callback'],
+				];
+			}
+		}
 	}
 
 	/**
@@ -345,6 +357,19 @@ class RouteTest extends TestCase
 	}
 
 	/**
+	 * @return iterable<string, array{callback: array{0:class-string|object,1:string}|callable}>
+	 */
+	public static function getRouteCallbacks(): iterable {
+		yield 'self-method' => ['callback' => [self::class, 'dummyRouteCallback']];
+		yield 'closure' => [
+			'callback' => static function () {
+				echo 'Hello!';
+			},
+		];
+		yield 'controller-method' => ['callback' => [DummyController::class, 'action']];
+	}
+
+	/**
 	 * @param RequestMethod                                  $method
 	 * @param string                                         $pathString
 	 * @param array{0:class-string|object,1:string}|callable $handler
@@ -418,11 +443,15 @@ class RouteTest extends TestCase
 	 * @param string        $route
 	 * @param string[]      $routeArray
 	 */
-	#[Depends('testCompare')] #[DataProvider('getCreateRoutes')]
-	public function testCreate(RequestMethod $method, string $route, array $routeArray): void {
-		$routeObj = $this->router->route($method, $route, [$this, 'dummyRouteCallback']);
+	#[Depends('testCompare'), DataProvider('getCreateRoutes')]
+	public function testCreate(RequestMethod $method, string $route, array $routeArray, $callback): void {
+		$routeObj = $this->router->route($method, $route, $callback);
 
 		self::assertTrue($routeObj->compare($this->router::getRoute($method, $routeArray)));
+
+		$this->router->unregister($routeObj);
+		$this->expectException(MethodNotAllowedException::class);
+		$this->router::getRoute($method, $routeArray);
 	}
 
 	/**

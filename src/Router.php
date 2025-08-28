@@ -543,6 +543,50 @@ class Router
 		self::$namedRoutes = [];
 	}
 
+	public function unregister(RouteInterface $route): void {
+		// Unregister named route
+		if (isset(self::$namedRoutes[$route->getName()]) && self::$namedRoutes[$route->getName()] === $route) {
+			unset(self::$namedRoutes[$route->getName()]);
+		}
+
+		// Unregister from available routes
+		$routes = &self::$availableRoutes;
+		foreach ($route->getPath() as $name) {
+			$lowerName = strtolower($name);
+			if (!isset($routes[$lowerName])) {
+				return; // Not found
+			}
+			if ($routes[$lowerName] instanceof RouteParameter) {
+				$routes = &$routes[$lowerName]->routes;
+			}
+			elseif (is_array($routes[$lowerName])) {
+				$routes = &$routes[$lowerName];
+			}
+			else {
+				return; // Not found
+			}
+		}
+
+		$type = $route->getMethod();
+		if (!isset($routes[$type->value])) {
+			return; // Not found
+		}
+
+		if (is_array($routes[$type->value])) {
+			$routes = &$routes[$type->value];
+		}
+		elseif ($routes[$type->value] instanceof RouteParameter) {
+			$routes = &$routes[$type->value]->routes;
+		}
+		else {
+			return; // Not found
+		}
+
+		if (isset($routes[0]) && $routes[0] instanceof RouteInterface && $routes[0] === $route) {
+			unset($routes[0]);
+		}
+	}
+
 	/**
 	 * @param string                                                           $pathString
 	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
