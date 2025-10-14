@@ -35,18 +35,19 @@ class RoutingExtension extends CompilerExtension
 	public function loadConfiguration(): void {
 		$builder = $this->getContainerBuilder();
 
-		$builder->addDefinition($this->name)
-		        ->setType(Router::class)
-		        ->setFactory(
-			        Router::class,
-			        [
-				        '@cache',
-				        $this->config->routeFiles,
-				        $this->config->controllers,
-			        ]
-		        )
-		        ->addSetup('setup')
-		        ->setTags(['lsr', 'routing']);
+		$router = $builder->addDefinition($this->name)
+		                  ->setType(Router::class)
+		                  ->setFactory(
+			                  Router::class,
+			                  [
+				                  '@cache',
+				                  $this->config->routeFiles,
+				                  $this->config->controllers,
+			                  ]
+		                  )
+		                  ->setTags(['lsr', 'routing']);
+
+		$router->lazy = false;
 	}
 
 }
