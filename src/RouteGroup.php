@@ -246,6 +246,14 @@ class RouteGroup
 		return $this;
 	}
 
+	/**
+	 * Add route parameter validator on all routes in group
+	 *
+	 * @param non-empty-string             $name
+	 * @param RouteParamValidatorInterface ...$validators
+	 *
+	 * @return $this
+	 */
 	public function paramAll(string $name, RouteParamValidatorInterface ...$validators): RouteGroup {
 		$this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
 		foreach ($this->routes as $route) {

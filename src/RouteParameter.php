@@ -10,8 +10,8 @@ use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Stringable;
 
 /**
- * @phpstan-import-type RouteNode from Router
  * @implements Iterator<string, RouteNode>
+ * @implements ArrayAccess<non-empty-string, RouteNode>
  */
 class RouteParameter implements ArrayAccess, Stringable, Countable, Iterator
 {
@@ -72,16 +72,30 @@ class RouteParameter implements ArrayAccess, Stringable, Countable, Iterator
 		}
 	}
 
+	/**
+	 * @return RouteNode
+	 */
 	public function current(): mixed {
-		return current($this->routes);
+		$current = current($this->routes);
+		if ($current === false) {
+			throw new \RuntimeException('Invalid RouteParameter::$routes array access');
+		}
+		return $current;
 	}
 
 	public function next(): void {
 		next($this->routes);
 	}
 
+	/**
+	 * @return string
+	 */
 	public function key(): mixed {
-		return key($this->routes);
+		$key = key($this->routes);
+		if ($key === null) {
+			throw new \RuntimeException('Invalid RouteParameter::$routes array access');
+		}
+		return $key;
 	}
 
 	public function valid(): bool {

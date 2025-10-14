@@ -10,3 +10,5 @@ parameters:
 	tmpDir: temp
 	universalObjectCratesClasses:
 		- Dibi\Row
+	typeAliases:
+		RouteNode: '\Lsr\Interfaces\RouteInterface|\Lsr\Core\Routing\RouteParameter|array<string, \Lsr\Interfaces\RouteInterface|\Lsr\Core\Routing\RouteParameter>'

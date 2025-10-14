@@ -17,11 +17,9 @@ use ReflectionException;
 use RegexIterator;
 use Throwable;
 
-/**
- * @phpstan-type RouteNode RouteInterface|RouteParameter|array<string, RouteNode>
- */
 class Router
 {
+	protected const string FIRST_ROUTE_KEY = '0';
 	protected const string PARAM_REGEX          = '({(?P<name>[^}]+)})\/?';
 	protected const string OPTIONAL_PARAM_REGEX = '(\[(?P<optname>[^[\]=]+)(?:=(?P<default>[^[\]]*))?])';
 
@@ -76,10 +74,10 @@ class Router
 	/**
 	 * Get set route if it exists
 	 *
-	 * @param RequestMethod                                    $type   [GET, POST, DELETE, PUT]
-	 * @param string[]                                         $path   URL path as an array
-	 * @param array<string, mixed>                             $params URL parameters in a key-value array
-	 * @param array<RouteInterface|array<RouteInterface>>|null $routes Available routes that should be processed
+	 * @param RequestMethod                 $type   [GET, POST, DELETE, PUT]
+	 * @param string[]                      $path   URL path as an array
+	 * @param array<string, mixed>          $params URL parameters in a key-value array
+	 * @param array<string, RouteNode>|null $routes Available routes that should be processed
 	 *
 	 * @return RouteInterface|null
 	 *
@@ -112,7 +110,6 @@ class Router
 			if ($paramRouteCount === 1) {
 				$key = array_key_first($paramRoutes);
 				$paramRoute = $paramRoutes[$key];
-				assert($paramRoute instanceof RouteParameter);
 
 				$name = $paramRoute->name;
 
@@ -139,8 +136,6 @@ class Router
 			// More than one parameter found → check all possible paths
 			if ($paramRouteCount > 1) {
 				foreach ($paramRoutes as $paramRoute) {
-					assert($paramRoute instanceof RouteParameter);
-
 					if (!$paramRoute->validate($value)) {
 						continue; // Invalid parameter value → skip
 					}
@@ -157,7 +152,12 @@ class Router
 					$params[$paramRoute->name] = $value;
 
 					// Recurse
-					$route = self::getRoute($type, array_slice($path, $counter), $params, $routes);
+					$route = self::getRoute(
+						$type,
+						array_slice($path, $counter),
+						$params,
+						$routes,
+					);
 					if (isset($route)) { // Found
 						return $route;
 					}
@@ -170,13 +170,15 @@ class Router
 			return null;
 		}
 
+		assert(is_array($routes));
+		/** @var array<string, RouteNode> $routes */
+
 		// Check optional parameters at the end of the path
 		$optionalParams = array_filter(
 			$routes,
 			static fn($node) => $node instanceof RouteParameter && $node->optional,
 		);
 		foreach ($optionalParams as $paramRoutes) {
-			assert($paramRoutes instanceof RouteParameter);
 			// No need to validate, because only the default value is used, and we assume it is valid.
 			try {
 				$route = self::tryOptionalParam($type, [], $params, $paramRoutes, null, $counter);
@@ -190,7 +192,9 @@ class Router
 		// Check if the request method exists for the found route
 		if (isset($routes[$type->value]) && is_array($routes[$type->value]) && count($routes[$type->value]) !== 0) {
 			// Return the first
-			return reset($routes[$type->value]);
+			$route = reset($routes[$type->value]);
+			assert($route instanceof RouteInterface);
+			return $route;
 		}
 
 		// Route exists, but the method for this route doesn't
@@ -246,11 +250,13 @@ class Router
 		unset($params[$name]);
 
 
-		if (isset($matches[2])) {
-			$params[$name] = $matches[2];
-		}
 		try {
-			$route = self::getRoute($type, array_slice($path, 1), $params, $routeParam->routes);
+			$route = self::getRoute(
+				$type,
+				array_slice($path, 1),
+				$params,
+				$routeParam->routes
+			);
 			if (isset($route)) {
 				return $route;
 			}
@@ -293,7 +299,7 @@ class Router
 	 * Load defined routes
 	 *
 	 *
-	 * @return array{0:array<RouteInterface|array<RouteInterface>>,1:array<string,RouteInterface>} [availableRoutes, namedRoutes]
+	 * @return array{0:array<string,RouteNode>,1:array<string,RouteInterface>} [availableRoutes, namedRoutes]
 	 * @throws DuplicateNamedRouteException
 	 * @throws DuplicateRouteException
 	 * @throws ReflectionException
@@ -480,37 +486,14 @@ class Router
 			$routes = &$routes[$type->value]->routes;
 		}
 
-		if (isset($routes[0]) && $routes[0] instanceof RouteInterface) {
-			if ($routes[0]->compare($route)) {
+		/** @phpstan-ignore isset.offset, booleanAnd.alwaysFalse */
+		if (isset($routes[self::FIRST_ROUTE_KEY]) && $routes[self::FIRST_ROUTE_KEY] instanceof RouteInterface) {
+			if ($routes[self::FIRST_ROUTE_KEY]->compare($route)) {
 				return;
 			}
-			throw new DuplicateRouteException($routes[0], $route);
+			throw new DuplicateRouteException($routes[self::FIRST_ROUTE_KEY], $route);
 		}
-		$routes[0] = $route;
-	}
-
-	public function addParameterValidators(Route $route): void {
-		// Go through route's path and add validators to all found parameters
-		$routes = self::$availableRoutes;
-		foreach ($route->getPath() as $part) {
-			if (!isset($routes[$part])) {
-				throw new \RuntimeException('Route part was not found. Is the route registered?');
-			}
-
-			$next = $routes[$part];
-
-			if ($next instanceof RouteParameter) {
-				// Add validators to the parameter
-				if (isset($route->paramValidators[$next->name])) {
-					$next->addValidators(...$route->paramValidators[$next->name]);
-				}
-
-				$routes = $next->routes;
-				continue;
-			}
-
-			$routes = $next;
-		}
+		$routes[self::FIRST_ROUTE_KEY] = $route;
 	}
 
 	/**
@@ -533,6 +516,33 @@ class Router
 	 */
 	public function registerNamed(RouteInterface $route): void {
 		self::$namedRoutes[$route->getName()] = $route;
+	}
+
+	public function addParameterValidators(Route $route): void {
+		// Go through route's path and add validators to all found parameters
+		$routes = self::$availableRoutes;
+		foreach ($route->getPath() as $part) {
+			$part = strtolower($part); // Normalize
+			assert(is_array($routes));
+			/** @var array<string, RouteNode> $routes */
+			if (!isset($routes[$part])) {
+				throw new \RuntimeException('Route part was not found. Is the route registered?');
+			}
+
+			$next = $routes[$part];
+
+			if ($next instanceof RouteParameter) {
+				// Add validators to the parameter
+				if (isset($route->paramValidators[$next->name])) {
+					$next->addValidators(...$route->paramValidators[$next->name]);
+				}
+
+				$routes = $next->routes;
+				continue;
+			}
+
+			$routes = $next;
+		}
 	}
 
 	/**
@@ -582,8 +592,12 @@ class Router
 			return; // Not found
 		}
 
-		if (isset($routes[0]) && $routes[0] instanceof RouteInterface && $routes[0] === $route) {
-			unset($routes[0]);
+		/** @phpstan-ignore isset.offset */
+		if (isset($routes[self::FIRST_ROUTE_KEY])) {
+			$firstRoute = $routes[self::FIRST_ROUTE_KEY];
+			if ($firstRoute instanceof RouteInterface && $firstRoute === $route) {
+				unset($routes[self::FIRST_ROUTE_KEY]);
+			}
 		}
 	}
 
