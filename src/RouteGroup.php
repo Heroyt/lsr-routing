@@ -5,6 +5,7 @@ namespace Lsr\Core\Routing;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
+use Psr\Http\Server\MiddlewareInterface;
 use RuntimeException;
 
 class RouteGroup
@@ -14,7 +15,7 @@ class RouteGroup
 	protected array           $routes      = [];
 	protected ?RouteInterface $activeRoute = null;
 
-	/** @var Middleware[] */
+    /** @var MiddlewareInterface[] */
 	protected array $middleware = [];
 	/** @var array<string, RouteGroup> */
 	protected array $groups = [];
@@ -75,11 +76,12 @@ class RouteGroup
 	/**
 	 * Adds a middleware to the last added route all to all routes if no route was created yet
 	 *
-	 * @param Middleware ...$middleware
+     * @param MiddlewareInterface ...$middleware
 	 *
 	 * @return $this
 	 */
-	public function middleware(Middleware ...$middleware) : static {
+    public function middleware(MiddlewareInterface ...$middleware): static
+    {
 		if (!isset($this->activeRoute)) {
 			return $this->middlewareAll(...$middleware);
 		}
@@ -92,11 +94,12 @@ class RouteGroup
 	/**
 	 * Add middleware to all group's routes
 	 *
-	 * @param Middleware ...$middleware
+     * @param MiddlewareInterface ...$middleware
 	 *
 	 * @return $this
 	 */
-	public function middlewareAll(Middleware ...$middleware) : static {
+    public function middlewareAll(MiddlewareInterface ...$middleware): static
+    {
 		// Add middleware to existing routes
 		foreach ($this->routes as $route) {
 			if (method_exists($route, 'middleware')) {

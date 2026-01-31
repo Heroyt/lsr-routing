@@ -1,7 +1,7 @@
 {
   "name": "lsr/routing",
   "description": "Laser framework core - Routing.",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "repositories": [
     {
       "type": "composer",
@@ -13,7 +13,8 @@
     "phpunit/phpunit": "^11",
     "phpstan/phpstan": "^2",
     "squizlabs/php_codesniffer": "^3.11",
-    "nyholm/psr7": "^1.8"
+    "nyholm/psr7": "^1.8",
+    "nette/di": "^3.2"
   },
   "autoload": {
     "psr-4": {
@@ -48,7 +49,6 @@
     "lsr/cache": "^0.3.0",
     "lsr/helpers": "^0.3.0",
     "lsr/request": "^0.3.0",
-    "nette/di": "^3.2",
     "laravel/serializable-closure": "^2.0"
   },
   "extra": {

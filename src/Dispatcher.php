@@ -4,13 +4,14 @@ namespace Lsr\Core\Routing;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 class Dispatcher implements RequestHandlerInterface
 {
 
 	/**
-	 * @param iterable<Middleware|RequestHandlerInterface|callable> $queue
+     * @param iterable<MiddlewareInterface|RequestHandlerInterface|callable> $queue
 	 */
 	public function __construct(
 		private iterable $queue,
@@ -24,7 +25,7 @@ class Dispatcher implements RequestHandlerInterface
 		$current = current($this->queue);
 		next($this->queue);
 
-		if ($current instanceof Middleware) {
+        if ($current instanceof MiddlewareInterface) {
 			return $current->process($request, $this);
 		}
 
@@ -42,7 +43,7 @@ class Dispatcher implements RequestHandlerInterface
 			sprintf(
 				'Invalid middleware queue entry: %s. Middleware must either be callable or implement %s.',
 				$current,
-				Middleware::class
+                MiddlewareInterface::class
 			)
 		);
 	}

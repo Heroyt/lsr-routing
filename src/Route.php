@@ -14,6 +14,7 @@ use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
+use Psr\Http\Server\MiddlewareInterface;
 
 class Route implements RouteInterface
 {
@@ -23,7 +24,7 @@ class Route implements RouteInterface
 	/** @var string URL in a string format */
 	protected(set) string $readablePath = '';
 
-	/** @var Middleware[] Route's middleware objects */
+    /** @var MiddlewareInterface[] Route's middleware objects */
 	public array                 $middleware = [];
 	protected(set) string $routeName    = '';
 
@@ -93,9 +94,10 @@ class Route implements RouteInterface
 	/**
 	 * Adds a middleware object to the Route
 	 *
-	 * @param Middleware ...$middleware
+     * @param MiddlewareInterface ...$middleware
 	 */
-	public function middleware(Middleware ...$middleware): Route {
+    public function middleware(MiddlewareInterface ...$middleware): Route
+    {
 		$this->middleware = array_merge($this->middleware, $middleware);
 		return $this;
 	}
