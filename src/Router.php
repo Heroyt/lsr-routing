@@ -88,6 +88,9 @@ class Router
 			$routes = self::$availableRoutes; // Default routes value
 		}
 
+        // Make sure the path doesn't contain any empty parts (e.g. due to double slashes)
+        $path = array_filter($path);
+
 		$counter = 0;
 		foreach ($path as $value) {
 			assert(is_array($routes));
