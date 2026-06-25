@@ -200,6 +200,12 @@ class Router
 			return $route;
 		}
 
+		if (isset($routes[RequestMethod::GET->value]) && $type === RequestMethod::HEAD && is_array($routes[RequestMethod::GET->value]) && count($routes[RequestMethod::GET->value]) !== 0) {
+			$route = reset($routes[RequestMethod::GET->value]);
+			assert($route instanceof RouteInterface);
+			return HeadRoute::createFallback($route);
+		}
+
 		// Route exists, but the method for this route doesn't
 		throw new MethodNotAllowedException(
 			'Method ' . $type->value . ' is not allowed for path /' . implode('/', $path)
@@ -613,6 +619,17 @@ class Router
 	 */
 	public function get(string $pathString, callable|array|RouteInterface $handler): Route {
 		return $this->route(RequestMethod::GET, $pathString, $handler);
+	}
+
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function head(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::HEAD, $pathString, $handler);
 	}
 
 	/**

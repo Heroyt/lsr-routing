@@ -3,7 +3,9 @@
 namespace Lsr\Core\Routing\Tests\TestCases;
 
 use Lsr\Caching\Cache;
+use Lsr\Core\Routing\HeadRoute;
 use Lsr\Core\Routing\LocalizedRoute;
+use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\RouteParameter;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
@@ -13,6 +15,10 @@ use Nette\Caching\Storages\DevNullStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
+use Psr\Http\Server\RequestHandlerInterface;
 
 class RouterTest extends TestCase
 {
@@ -220,6 +226,81 @@ class RouterTest extends TestCase
 			            JSON_THROW_ON_ERROR) . PHP_EOL
 		);
 		self::assertEquals($expectedParams, $params);
+	}
+
+	public function testHeadRouteFallsBackToGet(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$getRoute = $router->get('/head-fallback', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::HEAD, ['head-fallback'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertInstanceOf(HeadRoute::class, $routeGot);
+		self::assertSame(RequestMethod::HEAD, $routeGot->getMethod());
+		self::assertSame($getRoute->getPath(), $routeGot->getPath());
+		self::assertSame($getRoute->getReadable(), $routeGot->getReadable());
+		self::assertSame([], $params);
+
+		$router->unregisterAll();
+	}
+
+	public function testHeadRouteFallbackDoesNotCallGetHandler(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+
+		$called = false;
+		$router->get('/head-no-handler', static function () use (&$called): void {
+			$called = true;
+		});
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::HEAD, ['head-no-handler'], $params);
+
+		self::assertInstanceOf(HeadRoute::class, $routeGot);
+		$handler = $routeGot->getHandler();
+		$handler();
+
+		self::assertFalse($called);
+
+		$router->unregisterAll();
+	}
+
+	public function testHeadRouteFallbackCopiesGetMiddleware(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+
+		$middleware = new class implements MiddlewareInterface {
+			public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface {
+				return $handler->handle($request);
+			}
+		};
+		$router->get('/head-middleware', [DummyController::class, 'action'])
+		       ->middleware($middleware);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::HEAD, ['head-middleware'], $params);
+
+		self::assertInstanceOf(Route::class, $routeGot);
+		self::assertSame([$middleware], $routeGot->middleware);
+
+		$router->unregisterAll();
+	}
+
+	public function testExplicitHeadRouteHasPriorityOverGet(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router->get('/head-priority', [DummyController::class, 'action']);
+		$headRoute = $router->head('/head-priority', [DummyController::class, 'actionWithParams2']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::HEAD, ['head-priority'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($headRoute->compare($routeGot));
+
+		$router->unregisterAll();
 	}
 
 	/**

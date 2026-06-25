@@ -46,6 +46,19 @@ class RouteGroup
 	}
 
 	/**
+	 * Create a new HEAD route in the group
+	 *
+	 * @param string                                                    $path
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
+	 *
+	 * @return $this
+	 * @throws Exceptions\DuplicateRouteException
+	 */
+	public function head(string $path, array|callable|RouteInterface $handler) : static {
+		return $this->route(RequestMethod::HEAD, $path, $handler);
+	}
+
+	/**
 	 * Create a new route int the group
 	 *
 	 * @param RequestMethod                                  $method
