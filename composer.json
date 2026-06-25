@@ -1,7 +1,7 @@
 {
   "name": "lsr/routing",
   "description": "Laser framework core - Routing.",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "repositories": [
     {
       "type": "composer",
@@ -43,7 +43,7 @@
   "minimum-stability": "stable",
   "require": {
     "php": ">= 8.4",
-    "lsr/interfaces": "^0.3.1",
+    "lsr/interfaces": "^0.3.20",
     "psr/http-server-middleware": "^1.0",
     "psr/http-server-handler": "^1.0",
     "lsr/cache": "^0.3.0",
