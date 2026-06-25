@@ -317,6 +317,20 @@ class RouterTest extends TestCase
 		$router->unregisterAll();
 	}
 
+	public function testOptionsRoute(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$optionsRoute = $router->options('/options-route', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['options-route'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($optionsRoute->compare($routeGot));
+
+		$router->unregisterAll();
+	}
+
 	/**
 	 *
 	 * @param array<int|string, string> $path1
