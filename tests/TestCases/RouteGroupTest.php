@@ -40,6 +40,7 @@ class RouteGroupTest extends TestCase
 		    ->patch('{id}/aaa', [DummyController::class, 'actionWithParams'])
 		    ->options('{id}/aaa', [DummyController::class, 'actionWithParams'])
 		    ->connect('{id}/aaa', [DummyController::class, 'actionWithParams'])
+		    ->trace('{id}/aaa', [DummyController::class, 'actionWithParams'])
 		    ->update('{id}/bbb', [DummyController::class, 'actionWithParams']);
 
 		$route1 = Router::getRoute(RequestMethod::GET, ['grouped']);
@@ -53,6 +54,7 @@ class RouteGroupTest extends TestCase
 		$route9 = Router::getRoute(RequestMethod::PATCH, ['grouped', '1', 'aaa']);
 		$route10 = Router::getRoute(RequestMethod::OPTIONS, ['grouped', '1', 'aaa']);
 		$route11 = Router::getRoute(RequestMethod::CONNECT, ['grouped', '1', 'aaa']);
+		$route12 = Router::getRoute(RequestMethod::TRACE, ['grouped', '1', 'aaa']);
 
 		// Test that the groups exist
 		self::assertNotNull($route1);
@@ -70,6 +72,8 @@ class RouteGroupTest extends TestCase
 		self::assertSame(RequestMethod::OPTIONS, $route10->getMethod());
 		self::assertNotNull($route11);
 		self::assertSame(RequestMethod::CONNECT, $route11->getMethod());
+		self::assertNotNull($route12);
+		self::assertSame(RequestMethod::TRACE, $route12->getMethod());
 
 		// Test names
 		self::assertEquals('grouped-get', $route1->getName());

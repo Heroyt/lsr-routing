@@ -345,6 +345,20 @@ class RouterTest extends TestCase
 		$router->unregisterAll();
 	}
 
+	public function testTraceRoute(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$traceRoute = $router->trace('/trace-route', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::TRACE, ['trace-route'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($traceRoute->compare($routeGot));
+
+		$router->unregisterAll();
+	}
+
 	/**
 	 *
 	 * @param array<int|string, string> $path1

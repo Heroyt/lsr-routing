@@ -210,6 +210,19 @@ class RouteGroup
 	}
 
 	/**
+	 * Create a new TRACE route in the group
+	 *
+	 * @param string                                         $path
+	 * @param array{0:class-string|object,1:string}|callable|RouteInterface $handler
+	 *
+	 * @return $this
+	 * @throws Exceptions\DuplicateRouteException
+	 */
+	public function trace(string $path, array|callable|RouteInterface $handler) : static {
+		return $this->route(RequestMethod::TRACE, $path, $handler);
+	}
+
+	/**
 	 * Create a new PUT route in the group
 	 *
 	 * @param string                                         $path
