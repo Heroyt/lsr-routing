@@ -24,6 +24,7 @@ class Router
 	protected const string OPTIONAL_PARAM_REGEX = '(\[(?P<optname>[^[\]=]+)(?:=(?P<default>[^[\]]*))?])';
 
 	protected const string ANY_PARAM_REGEX = '(?:' . self::PARAM_REGEX . ')|(?:' . self::OPTIONAL_PARAM_REGEX . ')';
+	protected const string ASTERISK_ROUTE = '*';
 	/** @var array<string, RouteNode> Structure holding all set routes */
 	public static array $availableRoutes = [];
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
@@ -89,7 +90,11 @@ class Router
 		}
 
         // Make sure the path doesn't contain any empty parts (e.g. due to double slashes)
-        $path = array_filter($path);
+        $path = array_values(array_filter($path));
+
+		if ($type === RequestMethod::OPTIONS && $path === [self::ASTERISK_ROUTE]) {
+			return self::getAsteriskOptionsRoute($routes);
+		}
 
 		$counter = 0;
 		foreach ($path as $value) {
@@ -200,6 +205,17 @@ class Router
 			return $route;
 		}
 
+		if ($type === RequestMethod::OPTIONS) {
+			$allowedMethods = self::getAllowedMethods($routes);
+			if ($allowedMethods !== []) {
+				return OptionsRoute::createFallback(
+					$allowedMethods,
+					$path,
+					'/' . implode('/', $path),
+				);
+			}
+		}
+
 		if (isset($routes[RequestMethod::GET->value]) && $type === RequestMethod::HEAD && is_array($routes[RequestMethod::GET->value]) && count($routes[RequestMethod::GET->value]) !== 0) {
 			$route = reset($routes[RequestMethod::GET->value]);
 			assert($route instanceof RouteInterface);
@@ -210,6 +226,80 @@ class Router
 		throw new MethodNotAllowedException(
 			'Method ' . $type->value . ' is not allowed for path /' . implode('/', $path)
 		);
+	}
+
+	/**
+	 * @param array<string, RouteNode> $routes
+	 *
+	 * @return RouteInterface|null
+	 */
+	private static function getAsteriskOptionsRoute(array $routes): ?RouteInterface {
+		if (isset($routes[self::ASTERISK_ROUTE]) && is_array($routes[self::ASTERISK_ROUTE])) {
+			$asteriskRoutes = $routes[self::ASTERISK_ROUTE];
+			if (isset($asteriskRoutes[RequestMethod::OPTIONS->value]) && is_array($asteriskRoutes[RequestMethod::OPTIONS->value]) && count($asteriskRoutes[RequestMethod::OPTIONS->value]) !== 0) {
+				$route = reset($asteriskRoutes[RequestMethod::OPTIONS->value]);
+				assert($route instanceof RouteInterface);
+				return $route;
+			}
+		}
+
+		$allowedMethods = self::getAllowedMethodsRecursive($routes);
+		if ($allowedMethods === []) {
+			return null;
+		}
+
+		return OptionsRoute::createFallback($allowedMethods, [self::ASTERISK_ROUTE], self::ASTERISK_ROUTE);
+	}
+
+	/**
+	 * @param array<string, RouteNode> $routes
+	 *
+	 * @return list<RequestMethod>
+	 */
+	private static function getAllowedMethods(array $routes): array {
+		$methods = [];
+		foreach (RequestMethod::cases() as $method) {
+			if (isset($routes[$method->value]) && is_array($routes[$method->value]) && count($routes[$method->value]) !== 0) {
+				$methods[$method->value] = $method;
+			}
+		}
+
+		if (isset($methods[RequestMethod::GET->value])) {
+			$methods[RequestMethod::HEAD->value] ??= RequestMethod::HEAD;
+		}
+
+		if ($methods === []) {
+			return [];
+		}
+
+		$methods[RequestMethod::OPTIONS->value] ??= RequestMethod::OPTIONS;
+
+		return array_values($methods);
+	}
+
+	/**
+	 * @param array<string, RouteNode> $routes
+	 *
+	 * @return list<RequestMethod>
+	 */
+	private static function getAllowedMethodsRecursive(array $routes): array {
+		$methods = self::getAllowedMethods($routes);
+		foreach ($routes as $routeNode) {
+			if ($routeNode instanceof RouteParameter) {
+				foreach (self::getAllowedMethodsRecursive($routeNode->routes) as $method) {
+					$methods[$method->value] = $method;
+				}
+				continue;
+			}
+
+			if (is_array($routeNode)) {
+				foreach (self::getAllowedMethodsRecursive($routeNode) as $method) {
+					$methods[$method->value] = $method;
+				}
+			}
+		}
+
+		return array_values($methods);
 	}
 
 	/**

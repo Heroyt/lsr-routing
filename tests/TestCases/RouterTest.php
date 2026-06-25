@@ -5,6 +5,7 @@ namespace Lsr\Core\Routing\Tests\TestCases;
 use Lsr\Caching\Cache;
 use Lsr\Core\Routing\HeadRoute;
 use Lsr\Core\Routing\LocalizedRoute;
+use Lsr\Core\Routing\OptionsRoute;
 use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\RouteParameter;
 use Lsr\Core\Routing\Router;
@@ -324,6 +325,101 @@ class RouterTest extends TestCase
 
 		$params = [];
 		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['options-route'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($optionsRoute->compare($routeGot));
+
+		$router->unregisterAll();
+	}
+
+	public function testOptionsRouteFallsBackToAllowedMethods(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router->get('/options-fallback', [DummyController::class, 'action']);
+		$router->post('/options-fallback', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['options-fallback'], $params);
+
+		self::assertInstanceOf(OptionsRoute::class, $routeGot);
+		self::assertSame(RequestMethod::OPTIONS, $routeGot->getMethod());
+		self::assertSame(['options-fallback'], $routeGot->getPath());
+		self::assertSame('/options-fallback', $routeGot->getReadable());
+		self::assertSame([], $params);
+
+		$response = $routeGot->getHandler()();
+		self::assertSame('', (string) $response->getBody());
+		self::assertEqualsCanonicalizing(
+			['GET', 'POST', 'HEAD', 'OPTIONS'],
+			explode(', ', $response->getHeaderLine('Allow')),
+		);
+
+		$router->unregisterAll();
+	}
+
+	public function testOptionsRouteFallbackDoesNotCallHandlers(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+
+		$called = false;
+		$router->get('/options-no-handler', static function () use (&$called): void {
+			$called = true;
+		});
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['options-no-handler'], $params);
+
+		self::assertInstanceOf(OptionsRoute::class, $routeGot);
+		$routeGot->getHandler()();
+
+		self::assertFalse($called);
+
+		$router->unregisterAll();
+	}
+
+	public function testExplicitOptionsRouteHasPriorityOverFallback(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router->get('/options-priority', [DummyController::class, 'action']);
+		$optionsRoute = $router->options('/options-priority', [DummyController::class, 'actionWithParams2']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['options-priority'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($optionsRoute->compare($routeGot));
+
+		$router->unregisterAll();
+	}
+
+	public function testOptionsAsteriskRouteFallsBackToGlobalAllowedMethods(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router->get('/options-star-get', [DummyController::class, 'action']);
+		$router->patch('/options-star-patch', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['*'], $params);
+
+		self::assertInstanceOf(OptionsRoute::class, $routeGot);
+		self::assertSame(['*'], $routeGot->getPath());
+		self::assertSame('*', $routeGot->getReadable());
+		self::assertEqualsCanonicalizing(
+			['GET', 'PATCH', 'HEAD', 'OPTIONS'],
+			explode(', ', $routeGot->getHandler()()->getHeaderLine('Allow')),
+		);
+
+		$router->unregisterAll();
+	}
+
+	public function testExplicitOptionsAsteriskRouteHasPriorityOverFallback(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router->get('/options-star-priority', [DummyController::class, 'action']);
+		$optionsRoute = $router->options('*', [DummyController::class, 'actionWithParams2']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::OPTIONS, ['*'], $params);
 
 		self::assertInstanceOf(RouteInterface::class, $routeGot);
 		self::assertTrue($optionsRoute->compare($routeGot));
