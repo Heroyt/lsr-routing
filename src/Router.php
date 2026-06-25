@@ -717,6 +717,17 @@ class Router
 		return $this->route(RequestMethod::OPTIONS, $pathString, $handler);
 	}
 
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function connect(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::CONNECT, $pathString, $handler);
+	}
+
 	public function group(string $path = ''): RouteGroup {
 		return new RouteGroup($this, $path);
 	}

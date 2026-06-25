@@ -331,6 +331,20 @@ class RouterTest extends TestCase
 		$router->unregisterAll();
 	}
 
+	public function testConnectRoute(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$connectRoute = $router->connect('/connect-route', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::CONNECT, ['connect-route'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($connectRoute->compare($routeGot));
+
+		$router->unregisterAll();
+	}
+
 	/**
 	 *
 	 * @param array<int|string, string> $path1
