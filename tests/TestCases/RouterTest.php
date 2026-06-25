@@ -303,6 +303,20 @@ class RouterTest extends TestCase
 		$router->unregisterAll();
 	}
 
+	public function testPatchRoute(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$patchRoute = $router->patch('/patch-route', [DummyController::class, 'action']);
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::PATCH, ['patch-route'], $params);
+
+		self::assertInstanceOf(RouteInterface::class, $routeGot);
+		self::assertTrue($patchRoute->compare($routeGot));
+
+		$router->unregisterAll();
+	}
+
 	/**
 	 *
 	 * @param array<int|string, string> $path1

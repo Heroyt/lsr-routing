@@ -695,6 +695,17 @@ class Router
 		return $this->route(RequestMethod::PUT, $pathString, $handler);
 	}
 
+	/**
+	 * @param string                                                           $pathString
+	 * @param callable|array{0: class-string|object, 1: string}|RouteInterface $handler
+	 *
+	 * @return Route
+	 * @throws DuplicateRouteException
+	 */
+	public function patch(string $pathString, callable|array|RouteInterface $handler): Route {
+		return $this->route(RequestMethod::PATCH, $pathString, $handler);
+	}
+
 	public function group(string $path = ''): RouteGroup {
 		return new RouteGroup($this, $path);
 	}
