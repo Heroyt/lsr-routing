@@ -115,7 +115,7 @@ final class CompiledRouteCache
                     sprintf('Route cache cannot compile custom route type %s.', $route::class),
                 );
             }
-            if ($routeIds->contains($route)) {
+            if ($routeIds->offsetExists($route)) {
                 return $routeIds[$route];
             }
 
@@ -320,7 +320,7 @@ final class CompiledRouteCache
         if ($dependency instanceof ServiceReference) {
             return ['type' => 'service', 'id' => $router->getServiceId($dependency)];
         }
-        if (!$objectIds->contains($dependency)) {
+        if (!$objectIds->offsetExists($dependency)) {
             $id = count($objects);
             $objectIds[$dependency] = $id;
             $objects[] = $dependency;
