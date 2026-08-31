@@ -1,5 +1,4 @@
 <?php
-
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 
 $this->get('/loaded', [DummyController::class, 'action'])->name('get-loaded');
@@ -42,11 +41,11 @@ $langValidator = new class implements \Lsr\Core\Routing\Interfaces\RouteParamVal
 
 // Routes with validated parameters
 $this->group('validated')
-	->param('lang', $langValidator)
-	->get('[lang=cs]', [DummyController::class, 'action'])
-	->get('[lang=cs]/optional', [DummyController::class, 'action'])
-	->get('[lang=cs]/optional2', [DummyController::class, 'action'])
-	->get('test', [DummyController::class, 'action']);
+	  ->param('lang', $langValidator)
+	  ->get('[lang=cs]', [DummyController::class, 'action'])
+	  ->get('[lang=cs]/optional', [DummyController::class, 'action'])
+	  ->get('[lang=cs]/optional2', [DummyController::class, 'action'])
+	  ->get('test', [DummyController::class, 'action']);
 	  
 $numericValidator = new class implements \Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface {
 
@@ -57,6 +56,6 @@ $numericValidator = new class implements \Lsr\Core\Routing\Interfaces\RouteParam
 };
 
 $this->group('validated2')
-	->get('{id}', [DummyController::class, 'action'])->param('id', $numericValidator) // Only numeric IDs
-	->get('{slug}', [DummyController::class, 'action']); // Fallback route without validation
+	  ->get('{id}', [DummyController::class, 'action'])->param('id', $numericValidator) // Only numeric IDs
+	  ->get('{slug}', [DummyController::class, 'action']); // Fallback route without validation
 	  
