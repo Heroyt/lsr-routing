@@ -3,51 +3,97 @@ declare(strict_types=1);
 
 namespace Lsr\Core\Routing\DI;
 
+use Lsr\Core\Routing\Cache\CompiledRouteCache;
+use Lsr\Core\Routing\Commands\RouteCacheCleanCommand;
+use Lsr\Core\Routing\Commands\RouteCacheCompileCommand;
 use Lsr\Core\Routing\Router;
 use Nette;
 use Nette\DI\CompilerExtension;
-
+use Symfony\Component\Console\Command\Command;
 /**
- * @property object{routeFiles: non-empty-string[], controllers: non-empty-string[]} $config
+ * @property object{
+ *     routeFiles: non-empty-string[],
+ *     controllers: non-empty-string[],
+ *     cache: object{file:string,autoCompile:bool,checkTimestamps:bool,commands:bool}
+ * } $config
  */
 class RoutingExtension extends CompilerExtension
 {
 
 	public function getConfigSchema(): Nette\Schema\Schema {
-		return Nette\Schema\Expect::structure(
-			[
-				'routeFiles' => Nette\Schema\Expect::listOf(
-					Nette\Schema\Expect::string()->assert(
-						static fn(string $value) => file_exists($value),
-						'Route file must be a valid file'
-					)
-				)->default([]),
-				'controllers' => Nette\Schema\Expect::listOf(
-					Nette\Schema\Expect::string()->assert(
-						static fn(string $value) => file_exists($value),
-						'Route controller must be a valid file'
-					)
-				)->default([]),
-			]
-		);
+		return Nette\Schema\Expect::structure([
+			'routeFiles' => Nette\Schema\Expect::listOf(
+				Nette\Schema\Expect::string()->assert(
+					static fn(string $value) => file_exists($value),
+					'Route file must be a valid file',
+				),
+			)->default([]),
+			'controllers' => Nette\Schema\Expect::listOf(
+				Nette\Schema\Expect::string()->assert(
+					static fn(string $value) => file_exists($value),
+					'Route controller must be a valid file',
+				),
+			)->default([]),
+			'cache' => Nette\Schema\Expect::structure([
+				'file' => Nette\Schema\Expect::string()->default($this->getDefaultCacheFile()),
+				'autoCompile' => Nette\Schema\Expect::bool()->default(true),
+				'checkTimestamps' => Nette\Schema\Expect::bool()->default(false),
+				'commands' => Nette\Schema\Expect::bool()->default(true),
+			]),
+		]);
 	}
 
 	public function loadConfiguration(): void {
 		$builder = $this->getContainerBuilder();
 
-		$router = $builder->addDefinition($this->name)
-		                  ->setType(Router::class)
-		                  ->setFactory(
-			                  Router::class,
-			                  [
-				                  '@cache',
-				                  $this->config->routeFiles,
-				                  $this->config->controllers,
-			                  ]
-		                  )
-		                  ->setTags(['lsr', 'routing']);
+		$resolverName = $this->prefix('serviceResolver');
+		$builder->addDefinition($resolverName)
+			->setFactory(NetteServiceResolver::class, ['@container']);
 
+		$cacheName = $this->prefix('compiledCache');
+		$builder->addDefinition($cacheName)
+			->setFactory(CompiledRouteCache::class, [
+				$this->config->cache->file,
+				$this->config->cache->autoCompile,
+				$this->config->cache->checkTimestamps,
+				$this->config->routeFiles,
+				$this->config->controllers,
+			]);
+
+		$router = $builder->addDefinition($this->name)
+			->setType(Router::class)
+			->setFactory(Router::class, [
+				$this->config->routeFiles,
+				$this->config->controllers,
+				'@' . $cacheName,
+				'@' . $resolverName,
+			])
+			->setTags(['lsr', 'routing']);
 		$router->lazy = false;
+
+		if (!$this->config->cache->commands || !class_exists(Command::class)) {
+			return;
+		}
+		$tags = [
+			'lsr' => true,
+			'routing' => true,
+			'cache' => true,
+			'console.command' => true,
+			'command' => true,
+		];
+		$builder->addDefinition($this->prefix('commands.cacheCompile'))
+			->setFactory(RouteCacheCompileCommand::class)
+			->setTags($tags);
+		$builder->addDefinition($this->prefix('commands.cacheClean'))
+			->setFactory(RouteCacheCleanCommand::class)
+			->setTags($tags);
+	}
+
+	private function getDefaultCacheFile(): string {
+		$directory = defined('TMP_DIR')
+			? (string) constant('TMP_DIR')
+			: sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'lsr';
+		return rtrim($directory, '/\\') . DIRECTORY_SEPARATOR . 'routes.php';
 	}
 
 }

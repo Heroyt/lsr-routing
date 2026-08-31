@@ -25,7 +25,7 @@ class HeadRoute extends Route
         $route->setName($fallbackFor->getName());
 
         if ($fallbackFor instanceof Route) {
-            $route->middleware(...array_values($fallbackFor->middleware));
+            $route->middleware(...$fallbackFor->getMiddleware());
         }
 
         return $route;

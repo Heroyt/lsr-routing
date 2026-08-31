@@ -2,21 +2,28 @@
 
 namespace Lsr\Core\Routing;
 
-use Lsr\Caching\Cache;
+use InvalidArgumentException;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
+use Lsr\Core\Routing\Cache\CompiledRouteCache;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Exceptions\MethodNotAllowedException;
+use Lsr\Core\Routing\Exceptions\MiddlewareGroupNotFoundException;
+use Lsr\Core\Routing\Exceptions\MiddlewareGroupsResolvedException;
+use Lsr\Core\Routing\Exceptions\RouteCacheCompilationException;
+use Lsr\Core\Routing\Exceptions\ServiceReferenceException;
 use Lsr\Core\Routing\Interfaces\LocalizableRouteInterface;
+use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
+use Lsr\Core\Routing\Interfaces\ServiceResolverInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
+use Psr\Http\Server\MiddlewareInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionException;
 use RegexIterator;
-use Throwable;
 
 class Router
 {
@@ -31,18 +38,277 @@ class Router
 	/** @var array<string, RouteInterface> Array of named routes with their names as array keys */
 	public static array $namedRoutes = [];
 
+	/** @var array<non-empty-string,list<MiddlewareInterface|ServiceReference>> */
+	private array $middlewareGroups = [];
+	/** @var array<int,Route> */
+	private array $ownedRoutes = [];
+	/** @var array<int,RouteGroup> */
+	private array $routeGroups = [];
+	private bool $middlewareGroupsResolved = false;
+
 	/**
-	 * @param Cache    $cache
 	 * @param string[] $routeFiles
 	 * @param string[] $controllers
-	 *
-	 * @codeCoverageIgnore
 	 */
 	public function __construct(
-		private readonly Cache $cache,
 		private readonly array $routeFiles = [],
 		private readonly array $controllers = [],
+		private readonly ?CompiledRouteCache $compiledRouteCache = null,
+		private readonly ?ServiceResolverInterface $serviceResolver = null,
 	) {
+	}
+
+	public function serviceRef(string $service): ServiceReference {
+		return new ServiceReference($service);
+	}
+
+	public function middlewareGroup(
+		string $name,
+		MiddlewareInterface|ServiceReference ...$middleware,
+	): self {
+		$this->assertMiddlewareGroupReferenceAllowed();
+		$name = $this->normalizeMiddlewareGroupName($name);
+		foreach ($middleware as $entry) {
+			if ($entry instanceof MiddlewareInterface && in_array($entry, $this->middlewareGroups[$name] ?? [], true)) {
+				continue;
+			}
+			$this->middlewareGroups[$name][] = $entry;
+		}
+		$this->middlewareGroups[$name] ??= [];
+		return $this;
+	}
+
+	public function areMiddlewareGroupsResolved(): bool {
+		return $this->middlewareGroupsResolved;
+	}
+
+	public function assertMiddlewareGroupReferenceAllowed(): void {
+		if ($this->middlewareGroupsResolved) {
+			throw new MiddlewareGroupsResolvedException();
+		}
+	}
+
+	/**
+	 * @param list<MiddlewareInterface|string|ServiceReference> $middleware
+	 */
+	public function assertMiddlewareEntriesAllowed(array $middleware): void {
+		if (array_any($middleware, static fn(mixed $entry): bool => is_string($entry))) {
+			$this->assertMiddlewareGroupReferenceAllowed();
+		}
+	}
+
+	/** @internal */
+	public function trackRouteGroup(RouteGroup $group): void {
+		$this->routeGroups[spl_object_id($group)] = $group;
+	}
+
+	/**
+	 * @internal
+	 * @return array<int,Route>
+	 */
+	public function getOwnedRoutes(): array {
+		return $this->ownedRoutes;
+	}
+
+	/**
+	 * @internal
+	 * @return array<string,RouteNode>
+	 */
+	public function getAvailableRoutes(): array {
+		return self::$availableRoutes;
+	}
+
+	/**
+	 * @internal
+	 * @return array<string,RouteInterface>
+	 */
+	public function getNamedRoutes(): array {
+		return self::$namedRoutes;
+	}
+
+	/**
+	 * @internal
+	 * @return string[]
+	 */
+	public function getConfiguredRouteSources(): array {
+		return $this->routeFiles;
+	}
+
+	/**
+	 * @internal
+	 * @return string[]
+	 */
+	public function getConfiguredControllerSources(): array {
+		return $this->controllers;
+	}
+
+	/**
+	 * Resolve all middleware group references and DI-controlled route dependencies.
+	 */
+	private function resolveRouteDependencies(): void {
+		$missing = [];
+		foreach ($this->ownedRoutes as $route) {
+			$this->collectMissingMiddlewareGroups(
+				$route->getMiddlewareDefinitions(),
+				$route->getMethod()->value . ' /' . implode('/', $route->getPath()),
+				$missing,
+			);
+		}
+		foreach ($this->routeGroups as $group) {
+			$this->collectMissingMiddlewareGroups(
+				$group->getMiddlewareDefinitions(),
+				'group /' . ltrim($group->getPath(), '/'),
+				$missing,
+			);
+		}
+		if ($missing !== []) {
+			foreach ($missing as &$contexts) {
+				$contexts = array_values(array_unique($contexts));
+			}
+			unset($contexts);
+			throw new MiddlewareGroupNotFoundException($missing);
+		}
+
+		foreach ($this->routeGroups as $group) {
+			$group->replaceMiddlewareDefinitions(
+				$this->expandMiddlewareGroups($group->getMiddlewareDefinitions()),
+			);
+		}
+		foreach ($this->ownedRoutes as $route) {
+			$this->materializeRouteDependencies($route);
+		}
+		$this->middlewareGroupsResolved = true;
+	}
+
+	/**
+	 * @internal
+	 */
+	public function materializeRouteDependencies(Route $route): void {
+		$definitions = $this->expandMiddlewareGroups($route->getMiddlewareDefinitions());
+		$resolvedDefinitions = [];
+		$resolvedMiddleware = [];
+		foreach ($definitions as $definition) {
+			$middleware = $definition instanceof ServiceReference
+				? $this->resolveServiceReference($definition, MiddlewareInterface::class)
+				: $definition;
+			assert($middleware instanceof MiddlewareInterface);
+			if (in_array($middleware, $resolvedMiddleware, true)) {
+				continue;
+			}
+			$resolvedDefinitions[] = $definition;
+			$resolvedMiddleware[] = $middleware;
+		}
+		$route->replaceMiddleware($resolvedDefinitions, $resolvedMiddleware);
+
+		$resolvedValidatorDefinitions = [];
+		$resolvedValidators = [];
+		foreach ($route->getParamValidatorDefinitions() as $name => $validators) {
+			foreach ($validators as $definition) {
+				$validator = $definition instanceof ServiceReference
+					? $this->resolveServiceReference($definition, RouteParamValidatorInterface::class)
+					: $definition;
+				assert($validator instanceof RouteParamValidatorInterface);
+				if (in_array($validator, $resolvedValidators[$name] ?? [], true)) {
+					continue;
+				}
+				$resolvedValidatorDefinitions[$name][] = $definition;
+				$resolvedValidators[$name][] = $validator;
+			}
+		}
+		$route->replaceParamValidators($resolvedValidatorDefinitions, $resolvedValidators);
+		if ($resolvedValidators !== []) {
+			$this->addParameterValidators($route);
+		}
+	}
+
+	/**
+	 * @internal
+	 */
+	public function getServiceId(ServiceReference $reference): string {
+		if ($this->serviceResolver === null) {
+			throw new ServiceReferenceException(
+				sprintf('Cannot resolve route service "%s" without a configured service resolver.', $reference->service),
+			);
+		}
+		return $this->serviceResolver->getServiceId($reference);
+	}
+
+	/**
+	 * @internal
+	 * @param class-string $expectedType
+	 */
+	public function resolveServiceId(string $serviceId, string $expectedType): object {
+		if ($this->serviceResolver === null) {
+			throw new ServiceReferenceException(
+				sprintf('Cannot resolve route service "%s" without a configured service resolver.', $serviceId),
+			);
+		}
+		$service = $this->serviceResolver->getService($serviceId);
+		if (!$service instanceof $expectedType) {
+			throw new ServiceReferenceException(
+				sprintf(
+					'Route service "%s" must implement %s; got %s.',
+					$serviceId,
+					$expectedType,
+					$service::class,
+				),
+			);
+		}
+		return $service;
+	}
+
+	/**
+	 * @param class-string $expectedType
+	 */
+	private function resolveServiceReference(ServiceReference $reference, string $expectedType): object {
+		return $this->resolveServiceId($this->getServiceId($reference), $expectedType);
+	}
+
+	/**
+	 * @param list<MiddlewareInterface|string|ServiceReference> $middleware
+	 * @param array<non-empty-string,list<non-empty-string>>     $missing
+	 */
+	private function collectMissingMiddlewareGroups(array $middleware, string $context, array &$missing): void {
+		foreach ($middleware as $entry) {
+			if (!is_string($entry)) {
+				continue;
+			}
+			$name = $this->normalizeMiddlewareGroupName($entry);
+			if (!array_key_exists($name, $this->middlewareGroups)) {
+				$missing[$name][] = $context;
+			}
+		}
+	}
+
+	/**
+	 * @param list<MiddlewareInterface|string|ServiceReference> $middleware
+	 * @return list<MiddlewareInterface|ServiceReference>
+	 */
+	private function expandMiddlewareGroups(array $middleware): array {
+		$expanded = [];
+		foreach ($middleware as $entry) {
+			if (!is_string($entry)) {
+				$expanded[] = $entry;
+				continue;
+			}
+			$name = $this->normalizeMiddlewareGroupName($entry);
+			if (!array_key_exists($name, $this->middlewareGroups)) {
+				throw new MiddlewareGroupNotFoundException([$name => ['route materialization']]);
+			}
+			array_push($expanded, ...$this->middlewareGroups[$name]);
+		}
+		return $expanded;
+	}
+
+	/**
+	 * @return non-empty-string
+	 */
+	private function normalizeMiddlewareGroupName(string $name): string {
+		$name = strtolower(trim($name));
+		if ($name === '') {
+			throw new InvalidArgumentException('A middleware group name must not be empty.');
+		}
+		return $name;
 	}
 
 	/**
@@ -389,32 +655,38 @@ class Router
 	}
 
 	/**
-	 * Include all files from the /routes directory to initialize the Route objects
-	 *
-	 * Route loading implements cache for faster load times. Cache will expire after 1 day or
-	 * when any of the route config files changes.
+	 * Initialize routes from a fresh compiled cache or from configured sources.
 	 *
 	 * @throws ReflectionException
-	 * @see Route
-	 * @codeCoverageIgnore
 	 */
 	public function setup(): void {
-		// Cache requests
-		try {
-			[self::$availableRoutes, self::$namedRoutes] = $this->cache
-				->load(
-					'routes',
-					[$this, 'loadRoutes'],
-					[
-						Cache::Expire => '30 days',
-						Cache::Tags   => ['core', 'routes'],
-					]
-				);
-		} catch (Throwable $e) {
-			if ($e->getMessage() !== 'Serialization of \'Closure\' is not allowed') {
-				$this->loadRoutes(); // Fallback
-			}
+		$this->unregisterAll();
+		if ($this->compiledRouteCache?->load($this) === true) {
+			return;
 		}
+
+		$this->loadRoutes();
+		if ($this->compiledRouteCache?->autoCompile !== true) {
+			return;
+		}
+		try {
+			$this->compiledRouteCache->compile($this);
+		} catch (RouteCacheCompilationException) {
+			// Route compilation is an optimization. The live route graph remains valid.
+		}
+	}
+
+	public function compileCache(): void {
+		if ($this->compiledRouteCache === null) {
+			throw new RouteCacheCompilationException('No compiled route cache is configured.');
+		}
+		$this->unregisterAll();
+		$this->loadRoutes();
+		$this->compiledRouteCache->compile($this);
+	}
+
+	public function clearCache(): void {
+		$this->compiledRouteCache?->clear();
 	}
 
 	/**
@@ -458,6 +730,7 @@ class Router
 			require $file;
 		}
 
+		$this->resolveRouteDependencies();
 		return [self::$availableRoutes, self::$namedRoutes];
 	}
 
@@ -535,14 +808,15 @@ class Router
 
 				// Create normal web route
 				$route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+				$route->setRouter($this);
 				$this->register($route);
 				if (!empty($routeAttr->name)) {
 					$test = $this->getRouteByName($routeAttr->name);
 					if ($test !== null && !$route->compare($test)) {
 						throw new DuplicateNamedRouteException($test, $route);
 					}
+					$route->setName($routeAttr->name);
 					$this->registerNamed($route);
-					$route->setName($routeAttr->name); // Optional argument
 				}
 			}
 		}
@@ -556,6 +830,10 @@ class Router
 	 * @throws DuplicateRouteException
 	 */
 	public function register(RouteInterface $route): void {
+		if ($route instanceof Route) {
+			$route->setRouter($this);
+			$this->ownedRoutes[spl_object_id($route)] = $route;
+		}
 		$routes = &self::$availableRoutes;
 		$type = $route->getMethod();
 
@@ -673,6 +951,29 @@ class Router
 	public function unregisterAll(): void {
 		self::$availableRoutes = [];
 		self::$namedRoutes = [];
+		$this->middlewareGroups = [];
+		$this->ownedRoutes = [];
+		$this->routeGroups = [];
+		$this->middlewareGroupsResolved = false;
+	}
+
+	/**
+	 * @internal
+	 * @param array<string,RouteNode>      $availableRoutes
+	 * @param array<string,RouteInterface> $namedRoutes
+	 * @param list<Route>                  $routes
+	 */
+	public function restoreCompiledRoutes(array $availableRoutes, array $namedRoutes, array $routes): void {
+		self::$availableRoutes = $availableRoutes;
+		self::$namedRoutes = $namedRoutes;
+		$this->middlewareGroups = [];
+		$this->routeGroups = [];
+		$this->ownedRoutes = [];
+		$this->middlewareGroupsResolved = true;
+		foreach ($routes as $route) {
+			$this->ownedRoutes[spl_object_id($route)] = $route;
+			$route->setRouter($this);
+		}
 	}
 
 	public function unregister(RouteInterface $route): void {

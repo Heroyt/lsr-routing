@@ -15,13 +15,13 @@ class RouteGroup
 	protected array           $routes      = [];
 	protected ?RouteInterface $activeRoute = null;
 
-    /** @var MiddlewareInterface[] */
+	/** @var list<MiddlewareInterface|string|ServiceReference> */
 	protected array $middleware = [];
 	/** @var array<string, RouteGroup> */
 	protected array $groups = [];
 
 	/**
-	 * @var array<non-empty-string,RouteParamValidatorInterface[]>
+	 * @var array<non-empty-string,list<RouteParamValidatorInterface|ServiceReference>>
 	 */
 	public protected(set) array $paramValidators = [];
 
@@ -30,6 +30,7 @@ class RouteGroup
 		public readonly string         $path = '',
 		protected readonly ?RouteGroup $parent = null,
 	) {
+		$this->router->trackRouteGroup($this);
 	}
 
 	/**
@@ -87,14 +88,11 @@ class RouteGroup
 	}
 
 	/**
-	 * Adds a middleware to the last added route all to all routes if no route was created yet
-	 *
-     * @param MiddlewareInterface ...$middleware
-	 *
-	 * @return $this
+	 * Add middleware to the last route, or to the whole group before its first route.
 	 */
-    public function middleware(MiddlewareInterface ...$middleware): static
-    {
+	public function middleware(MiddlewareInterface|string|ServiceReference ...$middleware): static
+	{
+		$this->router->assertMiddlewareEntriesAllowed($middleware);
 		if (!isset($this->activeRoute)) {
 			return $this->middlewareAll(...$middleware);
 		}
@@ -105,30 +103,39 @@ class RouteGroup
 	}
 
 	/**
-	 * Add middleware to all group's routes
-	 *
-     * @param MiddlewareInterface ...$middleware
-	 *
-	 * @return $this
+	 * Add middleware to all existing and future routes in the group.
 	 */
-    public function middlewareAll(MiddlewareInterface ...$middleware): static
-    {
-		// Add middleware to existing routes
+	public function middlewareAll(MiddlewareInterface|string|ServiceReference ...$middleware): static
+	{
+		$this->router->assertMiddlewareEntriesAllowed($middleware);
 		foreach ($this->routes as $route) {
 			if (method_exists($route, 'middleware')) {
 				$route->middleware(...$middleware);
 			}
 		}
-
-		// Add middleware to all child groups
 		foreach ($this->groups as $group) {
 			$group->middlewareAll(...$middleware);
 		}
-
-		// Save middleware into group
 		$this->middleware = array_merge($this->middleware, $middleware);
-
 		return $this;
+	}
+
+	/**
+	 * @internal
+	 * @return list<MiddlewareInterface|string|ServiceReference>
+	 */
+	public function getMiddlewareDefinitions(): array
+	{
+		return $this->middleware;
+	}
+
+	/**
+	 * @internal
+	 * @param list<MiddlewareInterface|ServiceReference> $middleware
+	 */
+	public function replaceMiddlewareDefinitions(array $middleware): void
+	{
+		$this->middleware = $middleware;
 	}
 
 	/**
@@ -309,12 +316,12 @@ class RouteGroup
 	/**
 	 * Setup a route parameter validator.
 	 *
-	 * @param non-empty-string             $name
-	 * @param RouteParamValidatorInterface ...$validators
-	 *
-	 * @return $this
+	 * @param non-empty-string $name
 	 */
-	public function param(string $name, RouteParamValidatorInterface ...$validators): RouteGroup {
+	public function param(
+		string $name,
+		RouteParamValidatorInterface|ServiceReference ...$validators,
+	): RouteGroup {
 		if (isset($this->activeRoute)) {
 			$this->activeRoute->param($name, ...$validators);
 			return $this;
@@ -325,17 +332,19 @@ class RouteGroup
 	}
 
 	/**
-	 * Add route parameter validator on all routes in group
+	 * Add route parameter validators to all existing and future routes.
 	 *
-	 * @param non-empty-string             $name
-	 * @param RouteParamValidatorInterface ...$validators
-	 *
-	 * @return $this
+	 * @param non-empty-string $name
 	 */
-	public function paramAll(string $name, RouteParamValidatorInterface ...$validators): RouteGroup {
+	public function paramAll(
+		string $name,
+		RouteParamValidatorInterface|ServiceReference ...$validators,
+	): RouteGroup {
 		$this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
 		foreach ($this->routes as $route) {
-			$route->param($name, ...$validators);
+			if ($route instanceof Route) {
+				$route->param($name, ...$validators);
+			}
 		}
 		return $this;
 	}

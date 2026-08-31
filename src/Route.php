@@ -27,8 +27,12 @@ class Route implements LocalizableRouteInterface
 	/** @var string URL in a string format */
 	protected(set) string $readablePath = '';
 
-    /** @var MiddlewareInterface[] Route's middleware objects */
-	public array                 $middleware = [];
+	/** @var list<MiddlewareInterface> */
+	private array $middleware = [];
+	/** @var list<MiddlewareInterface|string|ServiceReference> */
+	private array $middlewareDefinitions = [];
+	/** @var list<MiddlewareInterface|ServiceReference> */
+	private array $resolvedMiddlewareDefinitions = [];
 	protected(set) string $routeName    = '';
 
 	/**
@@ -41,6 +45,11 @@ class Route implements LocalizableRouteInterface
 	 * @var array<non-empty-string,RouteParamValidatorInterface[]>
 	 */
 	protected(set) array $paramValidators = [];
+
+	/**
+	 * @var array<non-empty-string,list<RouteParamValidatorInterface|ServiceReference>>
+	 */
+	private array $paramValidatorDefinitions = [];
 
 	protected ?Router $router = null;
 
@@ -96,14 +105,60 @@ class Route implements LocalizableRouteInterface
 	}
 
 	/**
-	 * Adds a middleware object to the Route
-	 *
-     * @param MiddlewareInterface ...$middleware
+	 * Add middleware instances, middleware group names, or DI service references.
 	 */
-    public function middleware(MiddlewareInterface ...$middleware): Route
-    {
-		$this->middleware = array_merge($this->middleware, $middleware);
+	public function middleware(MiddlewareInterface|string|ServiceReference ...$middleware): Route
+	{
+		foreach ($middleware as $entry) {
+			if (is_string($entry)) {
+				$this->router?->assertMiddlewareGroupReferenceAllowed();
+			}
+			$this->middlewareDefinitions[] = $entry;
+			if ($entry instanceof MiddlewareInterface && !in_array($entry, $this->middleware, true)) {
+				$this->middleware[] = $entry;
+			}
+		}
+		if ($this->router?->areMiddlewareGroupsResolved()) {
+			$this->router->materializeRouteDependencies($this);
+		}
 		return $this;
+	}
+
+	/**
+	 * @return list<MiddlewareInterface>
+	 */
+	public function getMiddleware(): array
+	{
+		return $this->middleware;
+	}
+
+	/**
+	 * @internal
+	 * @return list<MiddlewareInterface|string|ServiceReference>
+	 */
+	public function getMiddlewareDefinitions(): array
+	{
+		return $this->middlewareDefinitions;
+	}
+
+	/**
+	 * @internal
+	 * @return list<MiddlewareInterface|ServiceReference>
+	 */
+	public function getResolvedMiddlewareDefinitions(): array
+	{
+		return $this->resolvedMiddlewareDefinitions;
+	}
+
+	/**
+	 * @internal
+	 * @param list<MiddlewareInterface|ServiceReference> $definitions
+	 * @param list<MiddlewareInterface>                  $middleware
+	 */
+	public function replaceMiddleware(array $definitions, array $middleware): void
+	{
+		$this->resolvedMiddlewareDefinitions = $definitions;
+		$this->middleware = $middleware;
 	}
 
 	/**
@@ -214,6 +269,15 @@ class Route implements LocalizableRouteInterface
 		return $this->handler;
 	}
 
+	/**
+	 * @internal
+	 * @return callable-string|array{0: class-string|object, 1: string}|SerializableClosure
+	 */
+	public function getCacheHandler(): string|array|SerializableClosure
+	{
+		return $this->handler;
+	}
+
 	public function setName(string $name): Route {
 		$this->routeName = $name;
 		return $this;
@@ -253,6 +317,7 @@ class Route implements LocalizableRouteInterface
 		assert($this->router !== null);
 		$route = LocalizedRoute::createLocalized($this->getMethod(), $path, $locale, $this);
 		$route->paramValidators = $this->paramValidators;
+		$route->paramValidatorDefinitions = $this->paramValidatorDefinitions;
 		$route->setRouter($this->router);
 		$this->router->register($route);
 		$this->localizedRoutes[$locale] = $route;
@@ -366,25 +431,71 @@ class Route implements LocalizableRouteInterface
 
 	public function setRouter(Router $router): Route {
 		$this->router = $router;
+		if ($router->areMiddlewareGroupsResolved()) {
+			$router->materializeRouteDependencies($this);
+		}
 		return $this;
 	}
 
 	/**
 	 * Setup a route parameter validator.
 	 *
-	 * @param non-empty-string             $name
-	 * @param RouteParamValidatorInterface ...$validators
-	 *
-	 * @return $this
+	 * @param non-empty-string $name
 	 */
-	public function param(string $name, RouteParamValidatorInterface ...$validators): static {
-		$this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
-		$this->router?->addParameterValidators($this);
+	public function param(
+		string $name,
+		RouteParamValidatorInterface|ServiceReference ...$validators,
+	): static {
+		foreach ($validators as $validator) {
+			$this->paramValidatorDefinitions[$name][] = $validator;
+			if (
+				$validator instanceof RouteParamValidatorInterface
+				&& !in_array($validator, $this->paramValidators[$name] ?? [], true)
+			) {
+				$this->paramValidators[$name][] = $validator;
+			}
+		}
+		if ($this->router?->areMiddlewareGroupsResolved()) {
+			$this->router->materializeRouteDependencies($this);
+		}
+		else {
+			$this->router?->addParameterValidators($this);
+		}
 		foreach ($this->localizedRoutes as $localizedRoute) {
 			if ($localizedRoute instanceof Route) {
 				$localizedRoute->param($name, ...$validators);
 			}
 		}
 		return $this;
+	}
+
+	/**
+	 * @internal
+	 * @return array<non-empty-string,list<RouteParamValidatorInterface|ServiceReference>>
+	 */
+	public function getParamValidatorDefinitions(): array
+	{
+		return $this->paramValidatorDefinitions;
+	}
+
+	/**
+	 * @internal
+	 * @param array<non-empty-string,list<RouteParamValidatorInterface|ServiceReference>> $definitions
+	 * @param array<non-empty-string,list<RouteParamValidatorInterface>>                  $validators
+	 */
+	public function replaceParamValidators(array $definitions, array $validators): void
+	{
+		$this->paramValidatorDefinitions = $definitions;
+		$this->paramValidators = $validators;
+	}
+
+	/**
+	 * @internal
+	 * @param array<string, RouteInterface> $localizedRoutes
+	 */
+	public function restoreLocalization(?string $locale, array $localizedRoutes): void
+	{
+		$this->locale = $locale;
+		$this->localizedRoutes = $localizedRoutes;
 	}
 }

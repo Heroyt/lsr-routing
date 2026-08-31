@@ -14,7 +14,7 @@
     "phpstan/phpstan": "^2",
     "squizlabs/php_codesniffer": "^4",
     "nyholm/psr7": "^1.8",
-    "nette/di": "^3.2"
+    "symfony/console": "^7.3 || ^8.0"
   },
   "autoload": {
     "psr-4": {
@@ -46,9 +46,9 @@
     "lsr/interfaces": "^0.3.20",
     "psr/http-server-middleware": "^1.0",
     "psr/http-server-handler": "^1.0",
-    "lsr/cache": "^0.3.0",
     "lsr/helpers": "^0.3.0",
     "lsr/request": "^0.3.0",
+    "nette/di": "^3.2",
     "laravel/serializable-closure": "^2.0"
   },
   "extra": {
