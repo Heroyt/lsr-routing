@@ -252,7 +252,7 @@ class RouteGroup
 		return $this;
 	}
 
-	public function localize(string $locale, string $path) : static {
+	public function localize(string $locale, ?string $path = null) : static {
 		if (!isset($this->activeRoute)) {
 			throw new RuntimeException('Cannot call RouteGroup::localize() without first creating a route in the group.');
 		}
@@ -261,6 +261,16 @@ class RouteGroup
 		}
 		return $this;
 
+	}
+
+	public function redirectFrom(string $path, ?string $locale = null): static {
+		if (!isset($this->activeRoute)) {
+			throw new RuntimeException('Cannot call RouteGroup::redirectFrom() without first creating a route in the group.');
+		}
+		if (method_exists($this->activeRoute, 'redirectFrom')) {
+			$this->activeRoute->redirectFrom($path, $locale);
+		}
+		return $this;
 	}
 
 	/**

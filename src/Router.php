@@ -7,6 +7,7 @@ use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Exceptions\MethodNotAllowedException;
+use Lsr\Core\Routing\Interfaces\LocalizableRouteInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use RecursiveDirectoryIterator;
@@ -202,7 +203,7 @@ class Router
 			// Return the first
 			$route = reset($routes[$type->value]);
 			assert($route instanceof RouteInterface);
-			return $route;
+			return self::resolveRoute($route, $params);
 		}
 
 		if ($type === RequestMethod::OPTIONS) {
@@ -219,7 +220,7 @@ class Router
 		if (isset($routes[RequestMethod::GET->value]) && $type === RequestMethod::HEAD && is_array($routes[RequestMethod::GET->value]) && count($routes[RequestMethod::GET->value]) !== 0) {
 			$route = reset($routes[RequestMethod::GET->value]);
 			assert($route instanceof RouteInterface);
-			return HeadRoute::createFallback($route);
+			return HeadRoute::createFallback(self::resolveRoute($route, $params));
 		}
 
 		// Route exists, but the method for this route doesn't
@@ -229,17 +230,39 @@ class Router
 	}
 
 	/**
+	 * Resolve locale metadata while keeping one logical route identity.
+	 *
+	 * @param array<string,mixed> $params
+	 */
+	private static function resolveRoute(RouteInterface $route, array &$params): RouteInterface {
+		if (!$route instanceof LocalizableRouteInterface) {
+			return $route;
+		}
+
+		$locale = $route->getLocale();
+		if ($locale !== null) {
+			$params['lang'] = $locale;
+		}
+		return $route->getCanonicalRoute();
+	}
+
+	/**
 	 * @param array<string, RouteNode> $routes
 	 *
 	 * @return RouteInterface|null
 	 */
 	private static function getAsteriskOptionsRoute(array $routes): ?RouteInterface {
-		if (isset($routes[self::ASTERISK_ROUTE]) && is_array($routes[self::ASTERISK_ROUTE])) {
-			$asteriskRoutes = $routes[self::ASTERISK_ROUTE];
-			if (isset($asteriskRoutes[RequestMethod::OPTIONS->value]) && is_array($asteriskRoutes[RequestMethod::OPTIONS->value]) && count($asteriskRoutes[RequestMethod::OPTIONS->value]) !== 0) {
-				$route = reset($asteriskRoutes[RequestMethod::OPTIONS->value]);
-				assert($route instanceof RouteInterface);
-				return $route;
+		/** @var mixed $asteriskRoutes */
+		$asteriskRoutes = $routes[self::ASTERISK_ROUTE] ?? null;
+		if (is_array($asteriskRoutes)) {
+			/** @var mixed $optionsRoutes */
+			$optionsRoutes = $asteriskRoutes[RequestMethod::OPTIONS->value] ?? null;
+			if (is_array($optionsRoutes)) {
+				foreach ($optionsRoutes as $route) {
+					if ($route instanceof RouteInterface) {
+						return $route;
+					}
+				}
 			}
 		}
 

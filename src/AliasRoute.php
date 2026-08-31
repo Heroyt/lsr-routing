@@ -7,6 +7,7 @@ use Lsr\Core\Requests\Response;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 
 class AliasRoute extends Route
 {
@@ -25,13 +26,34 @@ class AliasRoute extends Route
 		return $route;
 	}
 
-	public function redirect() : ResponseInterface {
-		return Response::create(
-			308, // Permanent redirect
-			[
-				'Location' => '/'.implode('/', $this->redirectTo->getPath()),
-			]
-		);
+	public function redirect(ServerRequestInterface $request): ResponseInterface {
+		$path = $this->redirectTo->getPath();
+		foreach ($path as $key => $part) {
+			$part = preg_replace_callback(
+				'/\{([^}]+)}/',
+				static function (array $match) use ($request): string {
+					$value = $request->getAttribute($match[1]);
+					if (!is_scalar($value) && !$value instanceof \Stringable) {
+						throw new \RuntimeException(sprintf('Missing route parameter "%s" for redirect.', $match[1]));
+					}
+					return rawurlencode((string) $value);
+				},
+				$part,
+			);
+			assert($part !== null);
+			$path[$key] = $part;
+		}
+
+		$location = '/'.implode('/', $path);
+		$query = $request->getUri()->getQuery();
+		if ($query !== '') {
+			$location .= '?'.$query;
+		}
+		if ($location === $request->getRequestTarget()) {
+			throw new \LogicException(sprintf('Route alias "%s" redirects to itself.', $this->getReadable()));
+		}
+
+		return Response::create(308, ['Location' => $location]);
 	}
 
 }
