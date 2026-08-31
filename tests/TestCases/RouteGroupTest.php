@@ -2,11 +2,9 @@
 
 namespace Lsr\Core\Routing\Tests\TestCases;
 
-use Lsr\Caching\Cache;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 use Lsr\Enums\RequestMethod;
-use Nette\Caching\Storages\DevNullStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -23,7 +21,7 @@ class RouteGroupTest extends TestCase
 
 	public static function getRouter(): Router {
 		if (!isset(self::$router)) {
-			self::$router = new Router(new Cache(new DevNullStorage()));
+			self::$router = new Router();
 		}
 		return self::$router;
 	}

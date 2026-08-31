@@ -2,7 +2,6 @@
 
 namespace Lsr\Core\Routing\Tests\TestCases;
 
-use Lsr\Caching\Cache;
 use Lsr\Core\Requests\Request;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
@@ -14,7 +13,6 @@ use Lsr\Core\Routing\Tests\Mockup\Model2;
 use Lsr\Core\Routing\Tests\Mockup\Models\TestModel;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
-use Nette\Caching\Storages\DevNullStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
@@ -25,7 +23,7 @@ class RouteTest extends TestCase
 	private readonly Router $router;
 
 	protected function setUp(): void {
-		$this->router = new Router(new Cache(new DevNullStorage()));
+		$this->router = new Router();
 	}
 
 	public static function getRoutes(): array {

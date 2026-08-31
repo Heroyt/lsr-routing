@@ -2,7 +2,6 @@
 
 namespace Lsr\Core\Routing\Tests\TestCases;
 
-use Lsr\Caching\Cache;
 use Lsr\Core\Routing\AliasRoute;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateLocalizedRouteException;
@@ -17,7 +16,6 @@ use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
-use Nette\Caching\Storages\DevNullStorage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
@@ -42,12 +40,9 @@ class RouterTest extends TestCase
 
 	public static function getRouter(): Router {
 		if (!isset(self::$router)) {
-			self::$router = new Router(
-				new Cache(new DevNullStorage()),
-				[
+			self::$router = new Router([
 					ROOT . 'routes/test.php',
-				]
-			);
+				]);
 		}
 		return self::$router;
 	}
@@ -239,7 +234,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testHeadRouteFallsBackToGet(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$getRoute = $router->get('/head-fallback', [DummyController::class, 'action']);
 
@@ -257,7 +252,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testHeadRouteFallbackDoesNotCallGetHandler(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 
 		$called = false;
@@ -278,7 +273,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testHeadRouteFallbackCopiesGetMiddleware(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 
 		$middleware = new class implements MiddlewareInterface {
@@ -293,13 +288,13 @@ class RouterTest extends TestCase
 		$routeGot = Router::getRoute(RequestMethod::HEAD, ['head-middleware'], $params);
 
 		self::assertInstanceOf(Route::class, $routeGot);
-		self::assertSame([$middleware], $routeGot->middleware);
+		self::assertSame([$middleware], $routeGot->getMiddleware());
 
 		$router->unregisterAll();
 	}
 
 	public function testExplicitHeadRouteHasPriorityOverGet(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router->get('/head-priority', [DummyController::class, 'action']);
 		$headRoute = $router->head('/head-priority', [DummyController::class, 'actionWithParams2']);
@@ -314,7 +309,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testPatchRoute(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$patchRoute = $router->patch('/patch-route', [DummyController::class, 'action']);
 
@@ -328,7 +323,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testOptionsRoute(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$optionsRoute = $router->options('/options-route', [DummyController::class, 'action']);
 
@@ -342,7 +337,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testOptionsRouteFallsBackToAllowedMethods(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router->get('/options-fallback', [DummyController::class, 'action']);
 		$router->post('/options-fallback', [DummyController::class, 'action']);
@@ -367,7 +362,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testOptionsRouteFallbackDoesNotCallHandlers(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 
 		$called = false;
@@ -387,7 +382,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testExplicitOptionsRouteHasPriorityOverFallback(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router->get('/options-priority', [DummyController::class, 'action']);
 		$optionsRoute = $router->options('/options-priority', [DummyController::class, 'actionWithParams2']);
@@ -402,7 +397,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testOptionsAsteriskRouteFallsBackToGlobalAllowedMethods(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router->get('/options-star-get', [DummyController::class, 'action']);
 		$router->patch('/options-star-patch', [DummyController::class, 'action']);
@@ -422,7 +417,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testExplicitOptionsAsteriskRouteHasPriorityOverFallback(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router->get('/options-star-priority', [DummyController::class, 'action']);
 		$optionsRoute = $router->options('*', [DummyController::class, 'actionWithParams2']);
@@ -437,7 +432,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testConnectRoute(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$connectRoute = $router->connect('/connect-route', [DummyController::class, 'action']);
 
@@ -451,7 +446,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testTraceRoute(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$traceRoute = $router->trace('/trace-route', [DummyController::class, 'action']);
 
@@ -478,7 +473,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedRouteDispatchesCanonicalRouteAndSetsLocale(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router
 			->get('/ochrana-osobnich-udaju', [DummyController::class, 'action'])
@@ -501,7 +496,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedHeadFallbackPropagatesLocale(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router
 			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
@@ -519,7 +514,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedLegacyAliasRedirectsOnceToCanonicalPath(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router
 			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
@@ -549,7 +544,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedPathCollisionFailsDuringRegistration(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router
 			->get('/prvni', [DummyController::class, 'action'])
@@ -570,7 +565,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testDuplicateLocaleFailsDuringRegistration(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router
 			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
@@ -588,7 +583,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedParameterMismatchFailsDuringRegistration(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router->get('/vysledky/{gameId}', [DummyController::class, 'action']);
 
@@ -603,7 +598,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testCanonicalAndLocalizedPathsCannotCollide(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router
 			->get('/privacy', [DummyController::class, 'action'])
@@ -620,7 +615,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedRouteRejectsLangPathParameter(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router->get('/privacy/{lang}', [DummyController::class, 'action']);
 
@@ -635,7 +630,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLegacyAliasParameterMismatchFailsDuringRegistration(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router->get('/results/{gameId}', [DummyController::class, 'action']);
 
@@ -650,7 +645,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testLocalizedRoutePreservesParameterValidators(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$route = $router
 			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
@@ -676,7 +671,7 @@ class RouterTest extends TestCase
 	}
 
 	public function testRouteCacheRoundTripPreservesLocalizedMetadata(): void {
-		$router = new Router(new Cache(new DevNullStorage()));
+		$router = new Router();
 		$router->unregisterAll();
 		$router
 			->get('/ochrana-osobnich-udaju', [DummyController::class, 'action'])
