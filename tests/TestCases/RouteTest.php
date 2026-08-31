@@ -24,9 +24,8 @@ class RouteTest extends TestCase
 
 	private readonly Router $router;
 
-	public function __construct(?string $name = null) {
+	protected function setUp(): void {
 		$this->router = new Router(new Cache(new DevNullStorage()));
-		parent::__construct($name);
 	}
 
 	public static function getRoutes(): array {

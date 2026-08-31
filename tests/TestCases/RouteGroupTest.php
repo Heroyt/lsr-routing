@@ -92,6 +92,24 @@ class RouteGroupTest extends TestCase
 		    ->name('asda');
 	}
 
+	public function testGroupDeclaresLocalizedRouteSet(): void {
+		$router = self::getRouter();
+		$router->unregisterAll();
+		$router
+			->group()
+			->get('/ochrana-osobnich-udaju', [DummyController::class, 'action'])
+			->name('public.privacy')
+			->localize('cs')
+			->localize('en', '/en/privacy');
+
+		$params = [];
+		$route = Router::getRoute(RequestMethod::GET, ['en', 'privacy'], $params);
+
+		self::assertSame('public.privacy', $route?->getName());
+		self::assertSame(['lang' => 'en'], $params);
+		$router->unregisterAll();
+	}
+
 	public function testNestedGroups(): void {
 		self::getRouter()->group('parent')
 		    ->get('/', [DummyController::class, 'action'])

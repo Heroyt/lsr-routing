@@ -3,8 +3,13 @@
 namespace Lsr\Core\Routing\Tests\TestCases;
 
 use Lsr\Caching\Cache;
+use Lsr\Core\Routing\AliasRoute;
+use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
+use Lsr\Core\Routing\Exceptions\DuplicateLocalizedRouteException;
+use Lsr\Core\Routing\Exceptions\InvalidLocalizedRouteException;
 use Lsr\Core\Routing\HeadRoute;
 use Lsr\Core\Routing\LocalizedRoute;
+use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Core\Routing\OptionsRoute;
 use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\RouteParameter;
@@ -26,9 +31,13 @@ class RouterTest extends TestCase
 
 	private static Router $router;
 
-	public function __construct(?string $name = null) {
-		$this::getRouter()->setup();
-		parent::__construct($name);
+	public static function setUpBeforeClass(): void {
+		self::getRouter()->setup();
+	}
+
+	protected function tearDown(): void {
+		self::getRouter()->unregisterAll();
+		self::getRouter()->loadRoutes();
 	}
 
 	public static function getRouter(): Router {
@@ -468,19 +477,226 @@ class RouterTest extends TestCase
 		self::assertSame($expected, Router::comparePaths($path1, $path2));
 	}
 
-	public function testLocalizedRouteRedirect() : void {
-		$request = new \Nyholm\Psr7\ServerRequest('GET', '/nahrano/10');
+	public function testLocalizedRouteDispatchesCanonicalRouteAndSetsLocale(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router
+			->get('/ochrana-osobnich-udaju', [DummyController::class, 'action'])
+			->name('public.privacy')
+			->localize('cs')
+			->localize('en', '/en/privacy');
 
 		$params = [];
-		$route = Router::getRoute(RequestMethod::GET, ['nahrano', '10'], $params);
-		self::assertInstanceOf(LocalizedRoute::class, $route);
-		self::assertEquals(10, $params['id']);
+		$routeGot = Router::getRoute(RequestMethod::GET, ['ochrana-osobnich-udaju'], $params);
+		self::assertSame($route, $routeGot);
+		self::assertSame(['lang' => 'cs'], $params);
 
-		$request = $request->withAttribute('lang', 'en')->withAttribute('id', $params['id']);
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::GET, ['en', 'privacy'], $params);
+		self::assertSame($route, $routeGot);
+		self::assertSame(['lang' => 'en'], $params);
+		self::assertSame('public.privacy', $routeGot?->getName());
 
-		$response = $route->redirect($request);
-		self::assertEquals(300, $response->getStatusCode());
-		self::assertEquals('/loaded/10', $response->getHeaderLine('Location'));
+		$router->unregisterAll();
+	}
+
+	public function testLocalizedHeadFallbackPropagatesLocale(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router
+			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
+			->localize('cs')
+			->localize('en', '/en/results/{gameId}');
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::HEAD, ['en', 'results', '42'], $params);
+
+		self::assertInstanceOf(HeadRoute::class, $routeGot);
+		self::assertSame(['gameId' => '42', 'lang' => 'en'], $params);
+		self::assertSame($route->getHandler(), $routeGot->fallbackFor->getHandler());
+
+		$router->unregisterAll();
+	}
+
+	public function testLocalizedLegacyAliasRedirectsOnceToCanonicalPath(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router
+			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
+			->localize('cs')
+			->localize('en', '/en/results/{gameId}')
+			->redirectFrom('/en/result/{gameId}', 'en');
+
+		$params = [];
+		$routeGot = Router::getRoute(RequestMethod::GET, ['en', 'result', '42'], $params);
+		self::assertInstanceOf(AliasRoute::class, $routeGot);
+		$request = new \Nyholm\Psr7\ServerRequest('GET', '/en/result/42?tab=score');
+		foreach ($params as $name => $value) {
+			$request = $request->withAttribute($name, $value);
+		}
+		$handler = $routeGot->getHandler();
+		$response = $handler($request);
+
+		self::assertSame(308, $response->getStatusCode());
+		self::assertSame('/en/results/42?tab=score', $response->getHeaderLine('Location'));
+
+		$params = [];
+		$canonical = Router::getRoute(RequestMethod::GET, ['en', 'results', '42'], $params);
+		self::assertSame($route, $canonical);
+		self::assertSame(['gameId' => '42', 'lang' => 'en'], $params);
+
+		$router->unregisterAll();
+	}
+
+	public function testLocalizedPathCollisionFailsDuringRegistration(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router
+			->get('/prvni', [DummyController::class, 'action'])
+			->localize('cs')
+			->localize('en', '/en/shared');
+
+		try {
+			$router
+				->get('/druha', [DummyController::class, 'action'])
+				->localize('cs')
+				->localize('en', '/en/shared');
+			self::fail('A localized path collision must fail during registration.');
+		} catch (DuplicateRouteException) {
+			self::addToAssertionCount(1);
+		} finally {
+			$router->unregisterAll();
+		}
+	}
+
+	public function testDuplicateLocaleFailsDuringRegistration(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router
+			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
+			->localize('cs')
+			->localize('en', '/en/results/{gameId}');
+
+		try {
+			$route->localize('en', '/en/published-results/{gameId}');
+			self::fail('A duplicate locale must fail during registration.');
+		} catch (DuplicateLocalizedRouteException) {
+			self::addToAssertionCount(1);
+		} finally {
+			$router->unregisterAll();
+		}
+	}
+
+	public function testLocalizedParameterMismatchFailsDuringRegistration(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router->get('/vysledky/{gameId}', [DummyController::class, 'action']);
+
+		try {
+			$route->localize('en', '/en/results/{id}');
+			self::fail('Localized variants must preserve the logical route parameter contract.');
+		} catch (InvalidLocalizedRouteException) {
+			self::addToAssertionCount(1);
+		} finally {
+			$router->unregisterAll();
+		}
+	}
+
+	public function testCanonicalAndLocalizedPathsCannotCollide(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router
+			->get('/privacy', [DummyController::class, 'action'])
+			->localize('cs');
+
+		try {
+			$route->localize('en', '/privacy');
+			self::fail('A localized path must not silently reuse its canonical route leaf.');
+		} catch (DuplicateRouteException) {
+			self::addToAssertionCount(1);
+		} finally {
+			$router->unregisterAll();
+		}
+	}
+
+	public function testLocalizedRouteRejectsLangPathParameter(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router->get('/privacy/{lang}', [DummyController::class, 'action']);
+
+		try {
+			$route->localize('cs');
+			self::fail('Locale metadata must not overwrite a route parameter named lang.');
+		} catch (InvalidLocalizedRouteException) {
+			self::addToAssertionCount(1);
+		} finally {
+			$router->unregisterAll();
+		}
+	}
+
+	public function testLegacyAliasParameterMismatchFailsDuringRegistration(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router->get('/results/{gameId}', [DummyController::class, 'action']);
+
+		try {
+			$route->redirectFrom('/result/{id}');
+			self::fail('A legacy alias must provide the canonical route parameter contract.');
+		} catch (InvalidLocalizedRouteException) {
+			self::addToAssertionCount(1);
+		} finally {
+			$router->unregisterAll();
+		}
+	}
+
+	public function testLocalizedRoutePreservesParameterValidators(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$route = $router
+			->get('/vysledky/{gameId}', [DummyController::class, 'action'])
+			->localize('cs')
+			->localize('en', '/en/results/{gameId}')
+			->param(
+				'gameId',
+				new class implements RouteParamValidatorInterface {
+					public function validate(mixed $value): bool {
+						return ctype_digit((string) $value);
+					}
+				},
+			);
+
+		$params = [];
+		self::assertNull(Router::getRoute(RequestMethod::GET, ['en', 'results', 'invalid'], $params));
+
+		$params = [];
+		self::assertSame($route, Router::getRoute(RequestMethod::GET, ['en', 'results', '42'], $params));
+		self::assertSame(['gameId' => '42', 'lang' => 'en'], $params);
+
+		$router->unregisterAll();
+	}
+
+	public function testRouteCacheRoundTripPreservesLocalizedMetadata(): void {
+		$router = new Router(new Cache(new DevNullStorage()));
+		$router->unregisterAll();
+		$router
+			->get('/ochrana-osobnich-udaju', [DummyController::class, 'action'])
+			->name('public.privacy')
+			->localize('cs')
+			->localize('en', '/en/privacy');
+
+		$serialized = serialize([Router::$availableRoutes, Router::$namedRoutes]);
+		$router->unregisterAll();
+		/** @var array{0:array<string,mixed>,1:array<string,\Lsr\Interfaces\RouteInterface>} $cached */
+		$cached = unserialize($serialized, ['allowed_classes' => true]);
+		[Router::$availableRoutes, Router::$namedRoutes] = $cached;
+
+		$params = [];
+		$route = Router::getRoute(RequestMethod::GET, ['en', 'privacy'], $params);
+		self::assertSame('public.privacy', $route?->getName());
+		self::assertSame(['lang' => 'en'], $params);
+		self::assertSame('/en/privacy', $route?->getRouteForLocale('en')?->getReadable());
+
+		$router->unregisterAll();
 	}
 
 	#[Depends('testLoadValidatedRoutes')]
