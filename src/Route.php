@@ -15,10 +15,16 @@ use Lsr\Core\Routing\Exceptions\InvalidLocalizedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Interfaces\LocalizableRouteInterface;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
+use Lsr\Core\Routing\Sitemap\SitemapChangeFrequency;
+use Lsr\Core\Routing\Sitemap\SitemapDefinition;
+use Lsr\Core\Routing\Sitemap\SitemapMetadata;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
 
+/**
+ * @phpstan-import-type SitemapDefinitionData from SitemapDefinition
+ */
 class Route implements LocalizableRouteInterface
 {
 
@@ -52,6 +58,8 @@ class Route implements LocalizableRouteInterface
 	private array $paramValidatorDefinitions = [];
 
 	protected ?Router $router = null;
+	private ?SitemapDefinition $sitemapDefinition = null;
+	private ?RouteMetadata $routeMetadata = null;
 
 	/**
 	 * @var callable-string|array{0: class-string|object, 1: string}|SerializableClosure
@@ -102,6 +110,126 @@ class Route implements LocalizableRouteInterface
 	 */
 	public function getName(): string {
 		return $this->routeName;
+	}
+
+	/**
+	 * Include this logical route family without clearing an existing or inherited sitemap name.
+	 */
+	public function sitemap(?string $name = null): static
+	{
+		$this->sitemapDefinition()->sitemap($name);
+		return $this;
+	}
+
+	/**
+	 * Exclude this family while retaining its name and metadata for later inclusion.
+	 */
+	public function sitemapExclude(): static
+	{
+		$this->sitemapDefinition()->sitemapExclude();
+		return $this;
+	}
+
+	/** Set a finite priority in [0, 1] without implicitly including the route. */
+	public function priority(float $priority): static
+	{
+		$this->sitemapDefinition()->priority($priority);
+		return $this;
+	}
+
+	/** Set the change frequency without implicitly including the route. */
+	public function changefreq(SitemapChangeFrequency|string $frequency): static
+	{
+		$this->sitemapDefinition()->changefreq($frequency);
+		return $this;
+	}
+
+	/**
+	 * Shallow-merge local metadata; null is a value, not an inheritance marker.
+	 * Values must be scalar, null, or acyclic nested arrays and are detached from caller references.
+	 * Application metadata is independent of sitemap settings and available on every HTTP method.
+	 *
+	 * @param array<string, mixed> $data
+	 */
+	public function meta(array $data): static
+	{
+		$this->metadataDefinition()->merge($data);
+		return $this;
+	}
+
+	/**
+	 * Return application metadata with group defaults applied.
+	 * The returned array is detached from later route/group declarations and caller references.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function getMeta(): array
+	{
+		return $this->metadataDefinition()->all();
+	}
+
+	/**
+	 * @internal Restore flattened application metadata from compiled routes.
+	 * @param array<array-key,mixed> $data
+	 */
+	public function restoreMeta(array $data): void
+	{
+		$this->metadataDefinition()->restore($data);
+	}
+
+	/**
+	 * Resolve each field against the closest ancestor, applying Router policy only to undefined inclusion.
+	 */
+	public function getSitemapMetadata(): SitemapMetadata
+	{
+		$definition = $this->exportSitemapDefinition();
+		return new SitemapMetadata(
+			$definition['included'] ?? $this->router?->isSitemapDefaultIncluded() ?? false,
+			$definition['name'],
+			$definition['priority'],
+			$definition['changefreq'] === null ? null : SitemapChangeFrequency::from($definition['changefreq']),
+		);
+	}
+
+	/**
+	 * @internal
+	 * @return SitemapDefinitionData Inherited declarations, deliberately excluding Router policy.
+	 */
+	public function exportSitemapDefinition(): array
+	{
+		return $this->sitemapDefinition()->export();
+	}
+
+	/**
+	 * @internal
+	 * @param array<array-key, mixed> $definition Flattened cache declarations; validated before replacement.
+	 */
+	public function restoreSitemapDefinition(array $definition): void
+	{
+		$this->sitemapDefinition()->restore($definition);
+	}
+
+	/**
+	 * Retain group ancestry rather than copying defaults, so later group declarations remain effective.
+	 *
+	 * @internal
+	 */
+	public function setGroup(RouteGroup $group): void
+	{
+		$this->sitemapDefinition()->setParent($group->getSitemapDefinition());
+		$this->metadataDefinition()->setParent($group->getMetadataDefinition());
+	}
+
+	/** Localized wrappers override this to share the root's declarations dynamically. */
+	protected function sitemapDefinition(): SitemapDefinition
+	{
+		return $this->sitemapDefinition ??= new SitemapDefinition();
+	}
+
+	/** Localized paths share application metadata with their logical route family. */
+	protected function metadataDefinition(): RouteMetadata
+	{
+		return $this->routeMetadata ??= new RouteMetadata();
 	}
 
 	/**

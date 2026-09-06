@@ -3,6 +3,8 @@
 namespace Lsr\Core\Routing;
 
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
+use Lsr\Core\Routing\Sitemap\SitemapChangeFrequency;
+use Lsr\Core\Routing\Sitemap\SitemapDefinition;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -19,6 +21,8 @@ class RouteGroup
 	protected array $middleware = [];
 	/** @var array<string, RouteGroup> */
 	protected array $groups = [];
+	private readonly SitemapDefinition $sitemapDefinition;
+	private readonly RouteMetadata $routeMetadata;
 
 	/**
 	 * @var array<non-empty-string,list<RouteParamValidatorInterface|ServiceReference>>
@@ -30,6 +34,8 @@ class RouteGroup
 		public readonly string         $path = '',
 		protected readonly ?RouteGroup $parent = null,
 	) {
+		$this->sitemapDefinition = new SitemapDefinition($parent?->getSitemapDefinition());
+		$this->routeMetadata = new RouteMetadata($parent?->getMetadataDefinition());
 		$this->router->trackRouteGroup($this);
 	}
 
@@ -71,6 +77,7 @@ class RouteGroup
 	 */
 	public function route(RequestMethod $method, string $path, array|callable|RouteInterface $handler) : static {
 		$route = $this->router->route($method, $this->combinePaths($path), $handler);
+		$route->setGroup($this);
 		// Add an already added middleware to the route
 		$route->middleware(...$this->middleware);
 		foreach ($this->paramValidators as $name => $validators) {
@@ -85,6 +92,126 @@ class RouteGroup
 
 	private function combinePaths(string $path) : string {
 		return trailingSlashIt($this->path) . ($path !== '' && $path[0] === '/' ? substr($path, 1) : $path);
+	}
+
+	/**
+	 * Include the active route, or establish an inheritable default before the first route.
+	 */
+	public function sitemap(?string $name = null): static
+	{
+		if ($this->activeRoute === null) {
+			return $this->sitemapAll($name);
+		}
+		if ($this->activeRoute instanceof Route) {
+			$this->activeRoute->sitemap($name);
+		}
+		return $this;
+	}
+
+	/** Exclude the active route, or establish an inheritable default before the first route. */
+	public function sitemapExclude(): static
+	{
+		if ($this->activeRoute === null) {
+			return $this->sitemapExcludeAll();
+		}
+		if ($this->activeRoute instanceof Route) {
+			$this->activeRoute->sitemapExclude();
+		}
+		return $this;
+	}
+
+	/** Set active-route priority, or an inheritable default before the first route. */
+	public function priority(float $priority): static
+	{
+		if ($this->activeRoute === null) {
+			return $this->priorityAll($priority);
+		}
+		if ($this->activeRoute instanceof Route) {
+			$this->activeRoute->priority($priority);
+		}
+		return $this;
+	}
+
+	/** Set active-route frequency, or an inheritable default before the first route. */
+	public function changefreq(SitemapChangeFrequency|string $frequency): static
+	{
+		if ($this->activeRoute === null) {
+			return $this->changefreqAll($frequency);
+		}
+		if ($this->activeRoute instanceof Route) {
+			$this->activeRoute->changefreq($frequency);
+		}
+		return $this;
+	}
+
+	/**
+	 * Shallow-merge active-route metadata, or defaults before the first route; null remains a value.
+	 *
+	 * @param array<string, mixed> $data
+	 */
+	public function meta(array $data): static
+	{
+		if ($this->activeRoute === null) {
+			return $this->metaAll($data);
+		}
+		if ($this->activeRoute instanceof Route) {
+			$this->activeRoute->meta($data);
+		}
+		return $this;
+	}
+
+	/**
+	 * Include existing and future descendants unless they explicitly override inclusion.
+	 * The live parent link preserves child declarations even when defaults change later.
+	 */
+	public function sitemapAll(?string $name = null): static
+	{
+		$this->sitemapDefinition->sitemap($name);
+		return $this;
+	}
+
+	/** Exclude existing and future descendants without overriding explicit child inclusion. */
+	public function sitemapExcludeAll(): static
+	{
+		$this->sitemapDefinition->sitemapExclude();
+		return $this;
+	}
+
+	/** Set inherited priority without implicitly including descendants or replacing explicit values. */
+	public function priorityAll(float $priority): static
+	{
+		$this->sitemapDefinition->priority($priority);
+		return $this;
+	}
+
+	/** Set inherited frequency without implicitly including descendants or replacing explicit values. */
+	public function changefreqAll(SitemapChangeFrequency|string $frequency): static
+	{
+		$this->sitemapDefinition->changefreq($frequency);
+		return $this;
+	}
+
+	/**
+	 * Shallow-merge defaults for existing and future descendants; explicit child keys always win.
+	 *
+	 * @param array<string, mixed> $data
+	 */
+	public function metaAll(array $data): static
+	{
+		$this->routeMetadata->merge($data);
+		return $this;
+	}
+
+	/** @internal Live defaults shared with descendants, never flattened during registration. */
+	public function getSitemapDefinition(): SitemapDefinition
+	{
+		return $this->sitemapDefinition;
+	}
+
+	/** @internal Application metadata defaults, independent of sitemap settings. */
+	public function getMetadataDefinition(): RouteMetadata
+	{
+		return $this->routeMetadata;
 	}
 
 	/**

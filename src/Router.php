@@ -3,7 +3,10 @@
 namespace Lsr\Core\Routing;
 
 use InvalidArgumentException;
+use Lsr\Core\Routing\Attributes\Meta;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
+use Lsr\Core\Routing\Attributes\Sitemap;
+use Lsr\Core\Routing\Attributes\SitemapExclude;
 use Lsr\Core\Routing\Cache\CompiledRouteCache;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
@@ -17,6 +20,7 @@ use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Core\Routing\Interfaces\ServiceResolverInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
+use Lsr\Core\Routing\Sitemap\SitemapEntry;
 use Psr\Http\Server\MiddlewareInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -47,6 +51,11 @@ class Router
 	private bool $middlewareGroupsResolved = false;
 
 	/**
+	 * Sitemap discovery defaults to opt-in. Set sitemapDefaultIncluded to true
+	 * for public-first applications, then exclude private routes and groups.
+	 * Nette DI exposes this as routing.sitemap.defaultIncluded.
+	 * Inclusion is a discovery hint, not an authorization or indexing guarantee.
+	 *
 	 * @param string[] $routeFiles
 	 * @param string[] $controllers
 	 */
@@ -55,7 +64,132 @@ class Router
 		private readonly array $controllers = [],
 		private readonly ?CompiledRouteCache $compiledRouteCache = null,
 		private readonly ?ServiceResolverInterface $serviceResolver = null,
+		private readonly bool $sitemapDefaultIncluded = false,
 	) {
+	}
+
+	public function isSitemapDefaultIncluded(): bool {
+		return $this->sitemapDefaultIncluded;
+	}
+
+	/**
+	 * Discover logical GET routes in one sitemap. Null selects the default sitemap.
+	 *
+	 * Call after setup(), or after registering routes manually. Redirect aliases,
+	 * localized wrappers and unregistered routes are never returned. Ordering is
+	 * unspecified; callers needing stable file partitioning should sort by route identity.
+	 *
+	 * @return list<Route>
+	 */
+	public function getSitemapRoutes(?string $name = null): array {
+		$routes = [];
+		foreach ($this->sitemapCandidates() as $route) {
+			$metadata = $route->getSitemapMetadata();
+			if ($metadata->included && $metadata->name === $name) {
+				$routes[] = $route;
+			}
+		}
+		return $routes;
+	}
+
+	/** @return list<string|null> Names of nonempty sitemaps; null denotes the default sitemap. */
+	public function getSitemapNames(): array {
+		$names = [];
+		foreach ($this->sitemapCandidates() as $route) {
+			$metadata = $route->getSitemapMetadata();
+			if ($metadata->included && !in_array($metadata->name, $names, true)) {
+				$names[] = $metadata->name;
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Expand logical routes into their canonical language paths.
+	 *
+	 * Every entry in a family has the same hreflang map, including itself when
+	 * its locale is declared. An unlabelled primary path is not an x-default.
+	 * Applications supply absolute URLs and parameter values, filter unavailable
+	 * content translations consistently, and render loc/xhtml:link elements.
+	 * Locale underscores become hyphens and casing is normalized to lowercase.
+	 * Language, optional script/region and explicit x-default shapes are supported;
+	 * applications must use assigned language/region codes for their declared locales.
+	 *
+	 * @see https://developers.google.com/search/docs/specialty/international/localized-versions#sitemap
+	 *
+	 * @return list<SitemapEntry>
+	 */
+	public function getSitemapEntries(?string $name = null): array {
+		$entries = [];
+		foreach ($this->getSitemapRoutes($name) as $route) {
+			$variants = [$route];
+			foreach ($route->localizedRoutes as $localized) {
+				if ($localized instanceof LocalizedRoute && $this->isRegisteredRoute($localized)) {
+					$variants[] = $localized;
+				}
+			}
+			$alternates = [];
+			foreach ($variants as $variant) {
+				$locale = $variant->getLocale();
+				if ($locale === null) {
+					continue;
+				}
+				$hreflang = strtolower(str_replace('_', '-', $locale));
+				if (
+					$hreflang !== 'x-default'
+					&& preg_match('/^[a-z]{2}(?:-[a-z]{4})?(?:-[a-z]{2})?$/D', $hreflang) !== 1
+				) {
+					throw new InvalidArgumentException(
+						sprintf('Route "%s" has an unsupported sitemap locale "%s".', $route->getReadable(), $locale),
+					);
+				}
+				if (isset($alternates[$hreflang])) {
+					throw new InvalidArgumentException(
+						sprintf('Route "%s" has duplicate sitemap hreflang "%s".', $route->getReadable(), $hreflang),
+					);
+				}
+				$alternates[$hreflang] = $variant;
+			}
+			$metadata = $route->getSitemapMetadata();
+			foreach ($variants as $variant) {
+				$entries[] = new SitemapEntry($variant, $metadata, $alternates);
+			}
+		}
+		return $entries;
+	}
+
+	/** @return \Generator<int,Route> */
+	private function sitemapCandidates(): \Generator {
+		foreach ($this->ownedRoutes as $route) {
+			if (
+				$route->getMethod() === RequestMethod::GET
+				&& !($route instanceof LocalizedRoute)
+				&& !($route instanceof AliasRoute)
+				&& $this->isRegisteredRoute($route)
+			) {
+				yield $route;
+			}
+		}
+	}
+
+	private function isRegisteredRoute(Route $route): bool {
+		/** @var array<array-key,mixed> $node The matcher contains nested nodes and numeric leaf keys. */
+		$node = self::$availableRoutes;
+		foreach ($route->getPath() as $part) {
+			$child = $node[strtolower($part)] ?? null;
+			if ($child instanceof RouteParameter) {
+				$node = $child->routes;
+			} elseif (is_array($child)) {
+				$node = $child;
+			} else {
+				return false;
+			}
+		}
+		$methods = $node[$route->getMethod()->value] ?? null;
+		if ($methods instanceof RouteParameter) {
+			$methods = $methods->routes;
+		}
+		return is_array($methods) && ($methods[self::FIRST_ROUTE_KEY] ?? null) === $route;
 	}
 
 	public function serviceRef(string $service): ServiceReference {
@@ -808,6 +942,15 @@ class Router
 
 				// Create normal web route
 				$route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+				foreach ($method->getAttributes(Meta::class) as $metaAttribute) {
+					$route->meta($metaAttribute->newInstance()->data);
+				}
+				foreach ($method->getAttributes(Sitemap::class) as $sitemapAttribute) {
+					$sitemapAttribute->newInstance()->apply($route);
+				}
+				if ($method->getAttributes(SitemapExclude::class) !== []) {
+					$route->sitemapExclude();
+				}
 				$route->setRouter($this);
 				$this->register($route);
 				if (!empty($routeAttr->name)) {
@@ -832,7 +975,6 @@ class Router
 	public function register(RouteInterface $route): void {
 		if ($route instanceof Route) {
 			$route->setRouter($this);
-			$this->ownedRoutes[spl_object_id($route)] = $route;
 		}
 		$routes = &self::$availableRoutes;
 		$type = $route->getMethod();
@@ -894,6 +1036,9 @@ class Router
 			throw new DuplicateRouteException($routes[self::FIRST_ROUTE_KEY], $route);
 		}
 		$routes[self::FIRST_ROUTE_KEY] = $route;
+		if ($route instanceof Route) {
+			$this->ownedRoutes[spl_object_id($route)] = $route;
+		}
 	}
 
 	/**
@@ -1020,6 +1165,7 @@ class Router
 			$firstRoute = $routes[self::FIRST_ROUTE_KEY];
 			if ($firstRoute instanceof RouteInterface && $firstRoute === $route) {
 				unset($routes[self::FIRST_ROUTE_KEY]);
+				unset($this->ownedRoutes[spl_object_id($route)]);
 			}
 		}
 	}

@@ -26,7 +26,7 @@ use UnexpectedValueException;
 
 final class CompiledRouteCache
 {
-    private const int FORMAT_VERSION = 1;
+    private const int FORMAT_VERSION = 3;
 
     /**
      * @param string[] $routeSources
@@ -167,6 +167,12 @@ final class CompiledRouteCache
                 'validators' => [],
                 'localized' => [],
             ];
+            // Keep the Router's inclusion policy out of the cache. Group defaults
+            // are flattened, but an unspecified inclusion decision remains null.
+            $definition['sitemap'] = $route instanceof LocalizedRoute || $route instanceof AliasRoute
+                ? null
+                : $route->exportSitemapDefinition();
+            $definition['meta'] = $route instanceof LocalizedRoute ? null : $route->getMeta();
 
             if ($route instanceof LocalizedRoute) {
                 $definition['parent'] = $registerRoute($route->parent);
@@ -428,6 +434,20 @@ final class CompiledRouteCache
                 }
 
                 $route->setName((string) ($definition['name'] ?? ''));
+                if (!$route instanceof LocalizedRoute) {
+                    $metadata = $definition['meta'] ?? null;
+                    if (!is_array($metadata)) {
+                        throw new UnexpectedValueException('Compiled route metadata is missing.');
+                    }
+                    $route->restoreMeta($metadata);
+                }
+                if (!$route instanceof LocalizedRoute && !$route instanceof AliasRoute) {
+                    $sitemap = $definition['sitemap'] ?? null;
+                    if (!is_array($sitemap)) {
+                        throw new UnexpectedValueException('Compiled sitemap metadata is missing.');
+                    }
+                    $route->restoreSitemapDefinition($sitemap);
+                }
                 foreach (($definition['middleware'] ?? []) as $dependency) {
                     $route->middleware($this->decodeDependency($dependency, $objects, $router, MiddlewareInterface::class));
                 }

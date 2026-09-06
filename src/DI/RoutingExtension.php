@@ -14,7 +14,8 @@ use Symfony\Component\Console\Command\Command;
  * @property object{
  *     routeFiles: non-empty-string[],
  *     controllers: non-empty-string[],
- *     cache: object{file:string,autoCompile:bool,checkTimestamps:bool,commands:bool}
+ *     cache: object{file:string,autoCompile:bool,checkTimestamps:bool,commands:bool},
+ *     sitemap: object{defaultIncluded:bool},
  * } $config
  */
 class RoutingExtension extends CompilerExtension
@@ -34,6 +35,9 @@ class RoutingExtension extends CompilerExtension
 					'Route controller must be a valid file',
 				),
 			)->default([]),
+			'sitemap' => Nette\Schema\Expect::structure([
+				'defaultIncluded' => Nette\Schema\Expect::bool()->default(false),
+			]),
 			'cache' => Nette\Schema\Expect::structure([
 				'file' => Nette\Schema\Expect::string()->default($this->getDefaultCacheFile()),
 				'autoCompile' => Nette\Schema\Expect::bool()->default(true),
@@ -67,6 +71,7 @@ class RoutingExtension extends CompilerExtension
 				$this->config->controllers,
 				'@' . $cacheName,
 				'@' . $resolverName,
+				$this->config->sitemap->defaultIncluded,
 			])
 			->setTags(['lsr', 'routing']);
 		$router->lazy = false;
