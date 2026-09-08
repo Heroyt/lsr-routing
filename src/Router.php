@@ -612,7 +612,6 @@ class Router
             // Exactly one available parameter found
             if ($paramRouteCount === 1) {
                 $key = array_key_first($paramRoutes);
-                assert($key !== null);
                 $paramRoute = $paramRoutes[$key];
 
                 $name = $paramRoute->name;
