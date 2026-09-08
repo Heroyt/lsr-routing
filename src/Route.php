@@ -8,11 +8,15 @@ declare(strict_types=1);
 namespace Lsr\Core\Routing;
 
 use Closure;
+use InvalidArgumentException;
 use Laravel\SerializableClosure\SerializableClosure;
+use LogicException;
+use Lsr\Core\Routing\Domain\Hostname;
 use Lsr\Core\Routing\Exceptions\DuplicateLocalizedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Exceptions\InvalidLocalizedRouteException;
+use Lsr\Core\Routing\Interfaces\DomainRouteInterface;
 use Lsr\Core\Routing\Interfaces\LocalizableRouteInterface;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Core\Routing\Sitemap\SitemapChangeFrequency;
@@ -26,7 +30,7 @@ use RuntimeException;
 /**
  * @phpstan-import-type SitemapDefinitionData from SitemapDefinition
  */
-class Route implements LocalizableRouteInterface
+class Route implements LocalizableRouteInterface, DomainRouteInterface
 {
     /** @var string[] Current URL path as an array (exploded using the "/") */
     public protected(set) array $path = [];
@@ -60,6 +64,9 @@ class Route implements LocalizableRouteInterface
     protected ?Router $router = null;
     private ?SitemapDefinition $sitemapDefinition = null;
     private ?RouteMetadata $routeMetadata = null;
+    private ?string $domainReference = null;
+    private ?string $resolvedDomain = null;
+    private bool $domainResolved = true;
 
     /**
      * @var callable-string|array{0: class-string|object, 1: string}|SerializableClosure
@@ -206,6 +213,7 @@ class Route implements LocalizableRouteInterface
     public function setGroup(RouteGroup $group): void {
         $this->sitemapDefinition()->setParent($group->getSitemapDefinition());
         $this->metadataDefinition()->setParent($group->getMetadataDefinition());
+        $this->setDomain($group->getDomainReference());
     }
 
     /** Localized wrappers override this to share the root's declarations dynamically. */
@@ -216,6 +224,46 @@ class Route implements LocalizableRouteInterface
     /** Localized paths share application metadata with their logical route family. */
     protected function metadataDefinition(): RouteMetadata {
         return $this->routeMetadata ??= new RouteMetadata();
+    }
+
+    /** @internal Set the declaration before the route is registered. */
+    public function setDomain(?string $domain): void {
+        if ($domain === $this->domainReference) {
+            return;
+        }
+        if ($this->router !== null) {
+            throw new LogicException('A registered route cannot change its domain.');
+        }
+        if ($domain !== null && $domain === '') {
+            throw new InvalidArgumentException('A domain constraint must not be empty.');
+        }
+        $this->domainReference = $domain;
+        $this->resolvedDomain = null;
+        $this->domainResolved = $domain === null;
+    }
+
+    /** @internal The declaration is an alias or a literal hostname until setup completes. */
+    public function getDomainReference(): ?string {
+        return $this->domainReference;
+    }
+
+    public function getDomain(): ?string {
+        if ( ! $this->domainResolved) {
+            throw new LogicException('Resolve domain declarations before using a domain-constrained route.');
+        }
+        return $this->resolvedDomain;
+    }
+
+    /** @internal Resolve without discarding the original declaration. */
+    public function resolveDomain(?string $domain): void {
+        $this->resolvedDomain = $domain === null ? null : Hostname::normalize($domain);
+        $this->domainResolved = true;
+    }
+
+    /** @internal Restore a flattened host constraint from the compiled cache. */
+    public function restoreDomain(?string $domain): void {
+        $this->resolveDomain($domain);
+        $this->domainReference = $this->resolvedDomain;
     }
 
     /**
@@ -298,8 +346,20 @@ class Route implements LocalizableRouteInterface
         return
             ! ($route instanceof LocalizedRoute) &&
             $this->getMethod() === $route->getMethod() &&
+            $this->hasSameDomain($route) &&
             static::compareRoutePaths($this->getPath(), $route->getPath()) &&
             self::compareHandlers($this->getHandler(), $route->getHandler());
+    }
+
+    private function hasSameDomain(RouteInterface $route): bool {
+        if ($route instanceof self) {
+            if ($this->domainResolved && $route->domainResolved) {
+                return $this->getDomain() === $route->getDomain();
+            }
+            return $this->getDomainReference() === $route->getDomainReference();
+        }
+        $domain = $this->domainResolved ? $this->getDomain() : $this->getDomainReference();
+        return $domain === ($route instanceof DomainRouteInterface ? $route->getDomain() : null);
     }
 
     /**
@@ -426,7 +486,6 @@ class Route implements LocalizableRouteInterface
         $route = LocalizedRoute::createLocalized($this->getMethod(), $path, $locale, $this);
         $route->paramValidators = $this->paramValidators;
         $route->paramValidatorDefinitions = $this->paramValidatorDefinitions;
-        $route->setRouter($this->router);
         $this->router->register($route);
         $this->localizedRoutes[$locale] = $route;
         return $this;
@@ -512,7 +571,7 @@ class Route implements LocalizableRouteInterface
             );
         }
         $alias = AliasRoute::createAlias($this->getMethod(), $path, $redirectTo);
-        $alias->setRouter($this->router);
+        $alias->setDomain($this->getDomainReference());
         $this->router->register($alias);
         return $this;
     }

@@ -13,7 +13,8 @@ class Options extends Route
     public function __construct(
         public string $path,
         public string $name = '',
+        ?string $domain = null,
     ) {
-        parent::__construct(RequestMethod::OPTIONS, $path, $this->name);
+        parent::__construct(RequestMethod::OPTIONS, $path, $this->name, $domain);
     }
 }

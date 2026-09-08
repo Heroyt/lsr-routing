@@ -6,6 +6,8 @@ namespace Lsr\Core\Routing;
 
 use LogicException;
 use Lsr\Core\Requests\Response;
+use Lsr\Core\Routing\Domain\Hostname;
+use Lsr\Core\Routing\Interfaces\DomainRouteInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -52,8 +54,18 @@ class AliasRoute extends Route
         if ($query !== '') {
             $location .= '?' . $query;
         }
-        if ($location === $request->getRequestTarget()) {
+        $domain = $this->redirectTo instanceof DomainRouteInterface ? $this->redirectTo->getDomain() : null;
+        $requestHost = $request->getUri()->getHost();
+        $crossHost = $domain !== null && ($requestHost === '' || $domain !== Hostname::normalize($requestHost));
+        if ( ! $crossHost && $location === $request->getRequestTarget()) {
             throw new LogicException(sprintf('Route alias "%s" redirects to itself.', $this->getReadable()));
+        }
+        if ($crossHost) {
+            $location = (string) $request->getUri()
+                ->withUserInfo('')
+                ->withHost($domain)
+                ->withPath('/' . implode('/', $path))
+                ->withFragment('');
         }
 
         return Response::create(308, ['Location' => $location]);

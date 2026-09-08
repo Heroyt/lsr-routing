@@ -13,7 +13,8 @@ class Head extends Route
     public function __construct(
         public string $path,
         public string $name = '',
+        ?string $domain = null,
     ) {
-        parent::__construct(RequestMethod::HEAD, $path, $this->name);
+        parent::__construct(RequestMethod::HEAD, $path, $this->name, $domain);
     }
 }

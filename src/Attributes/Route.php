@@ -18,6 +18,7 @@ class Route
         public RequestMethod $method = RequestMethod::GET,
         public string        $path = '',
         public string        $name = '',
+        public ?string       $domain = null,
     ) {
         if (empty($this->path)) {
             throw new InvalidArgumentException('Missing required argument - path');

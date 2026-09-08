@@ -44,6 +44,14 @@ class LocalizedRoute extends Route
         return $this->parent->getName();
     }
 
+    public function getDomainReference(): ?string {
+        return $this->parent->getDomainReference();
+    }
+
+    public function getDomain(): ?string {
+        return $this->parent->getDomain();
+    }
+
     /**
      * A localized path is part of one logical family, including its Router inclusion policy.
      */

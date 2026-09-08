@@ -13,8 +13,9 @@ class Delete extends Route
     public function __construct(
         public string $path,
         public string $name = '',
+        ?string $domain = null,
     ) {
-        parent::__construct(RequestMethod::DELETE, $path, $this->name);
+        parent::__construct(RequestMethod::DELETE, $path, $this->name, $domain);
     }
 
 }

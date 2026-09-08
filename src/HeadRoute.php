@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Lsr\Core\Routing;
 
 use Lsr\Core\Requests\Response;
+use Lsr\Core\Routing\Interfaces\DomainRouteInterface;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -22,6 +23,9 @@ class HeadRoute extends Route
         $route->path = $fallbackFor->getPath();
         $route->readablePath = $fallbackFor->getReadable();
         $route->setName($fallbackFor->getName());
+        if ($fallbackFor instanceof DomainRouteInterface) {
+            $route->restoreDomain($fallbackFor->getDomain());
+        }
 
         if ($fallbackFor instanceof Route) {
             $route->middleware(...$fallbackFor->getMiddleware());

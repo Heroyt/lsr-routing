@@ -7,6 +7,7 @@ namespace Lsr\Core\Routing\Cache;
 use ErrorException;
 use Laravel\SerializableClosure\SerializableClosure;
 use Lsr\Core\Routing\AliasRoute;
+use Lsr\Core\Routing\Domain\Hostname;
 use Lsr\Core\Routing\Exceptions\RouteCacheCompilationException;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Core\Routing\LocalizedRoute;
@@ -29,12 +30,12 @@ use UnexpectedValueException;
  * @phpstan-type CompiledDependency array{type:'service',id:string}|array{type:'object',id:int}
  * @phpstan-type CompiledHandler array{type:'callable',value:string}|array{type:'class_method',class:class-string,method:string}|array{type:'object_method',object:CompiledDependency,method:string}|array{type:'closure',dependency:CompiledDependency}
  * @phpstan-import-type SitemapDefinitionData from SitemapDefinition
- * @phpstan-type CompiledRouteDefinition array{type:'route'|'localized'|'alias',method:string,path:string,name:string,locale:?string,middleware:list<CompiledDependency>,validators:array<non-empty-string,list<CompiledDependency>>,localized:array<string,int>,sitemap:SitemapDefinitionData|null,meta:array<string,mixed>|null,parent?:int,redirectTo?:int,handler?:CompiledHandler}
- * @phpstan-type CompiledRoutes array{version:int,manifest:array<string,int|null>,tree:array<string,mixed>,routes:array<int,CompiledRouteDefinition>,named:array<string,int>,objects:string}
+ * @phpstan-type CompiledRouteDefinition array{type:'route'|'localized'|'alias',method:string,path:string,name:string,locale:?string,domain:?string,middleware:list<CompiledDependency>,validators:array<non-empty-string,list<CompiledDependency>>,localized:array<string,int>,sitemap:SitemapDefinitionData|null,meta:array<string,mixed>|null,parent?:int,redirectTo?:int,handler?:CompiledHandler}
+ * @phpstan-type CompiledRoutes array{version:int,manifest:array<string,int|null>,tree:array<string,mixed>,domainTrees:array<array-key,array<string,mixed>>,domainAliases:array<array-key,string>,routes:array<int,CompiledRouteDefinition>,named:array<string,int>,objects:string}
  */
 final class CompiledRouteCache
 {
-    private const int FORMAT_VERSION = 3;
+    private const int FORMAT_VERSION = 4;
 
     /**
      * @param string[] $routeSources
@@ -140,6 +141,10 @@ final class CompiledRouteCache
         };
 
         $tree = $this->encodeNode($router->getAvailableRoutes(), $registerRoute);
+        $domainTrees = [];
+        foreach ($router->getDomainRoutes() as $domain => $domainTree) {
+            $domainTrees[$domain] = $this->encodeNode($domainTree, $registerRoute);
+        }
         $named = [];
         foreach ($router->getNamedRoutes() as $name => $route) {
             $named[$name] = $registerRoute($route);
@@ -167,6 +172,7 @@ final class CompiledRouteCache
                 'path' => $route->getReadable(),
                 'name' => $route->getName(),
                 'locale' => $route->getLocale(),
+                'domain' => $route->getDomain(),
                 'middleware' => [],
                 'validators' => [],
                 'localized' => [],
@@ -227,6 +233,8 @@ final class CompiledRouteCache
             'version' => self::FORMAT_VERSION,
             'manifest' => $this->createSourceManifest(),
             'tree' => $tree,
+            'domainTrees' => $domainTrees,
+            'domainAliases' => $router->getDomainAliases(),
             'routes' => $routeData,
             'named' => $named,
             'objects' => $serializedObjects,
@@ -428,6 +436,17 @@ final class CompiledRouteCache
                 }
 
                 $route->setName($this->decodeString($definition['name'] ?? ''));
+                if ( ! array_key_exists('domain', $definition)) {
+                    throw new UnexpectedValueException('Compiled route domain is missing.');
+                }
+                $domain = $definition['domain'] === null ? null : $this->decodeDomain($definition['domain']);
+                if ($route instanceof LocalizedRoute) {
+                    if ($domain !== $route->parent->getDomain()) {
+                        throw new UnexpectedValueException('A compiled localized route domain differs from its parent.');
+                    }
+                } else {
+                    $route->restoreDomain($domain);
+                }
                 if ( ! $route instanceof LocalizedRoute) {
                     $metadata = $definition['meta'] ?? null;
                     if ( ! is_array($metadata)) {
@@ -489,6 +508,22 @@ final class CompiledRouteCache
         if ( ! is_array($tree)) {
             throw new UnexpectedValueException('The compiled route tree root must be an array.');
         }
+        $this->validateTreeDomain($tree, null);
+        $domainTrees = [];
+        foreach ($this->decodeArray($data['domainTrees'] ?? null) as $domain => $definition) {
+            $domain = $this->decodeDomain((string) $domain);
+            $domainTree = $this->decodeArrayNode($definition, $routes);
+            $this->validateTreeDomain($domainTree, $domain);
+            $domainTrees[$domain] = $domainTree;
+        }
+        $domainAliases = [];
+        foreach ($this->decodeArray($data['domainAliases'] ?? null) as $alias => $domain) {
+            $alias = (string) $alias;
+            if ($alias === '') {
+                throw new UnexpectedValueException('A compiled domain alias is invalid.');
+            }
+            $domainAliases[$alias] = $this->decodeDomain($domain);
+        }
         $named = [];
         foreach ($this->decodeArray($data['named'] ?? []) as $name => $id) {
             if ( ! is_int($id) || ! isset($routes[$id])) {
@@ -498,7 +533,34 @@ final class CompiledRouteCache
         }
 
         ksort($routes);
-        $router->restoreCompiledRoutes($tree, $named, array_values($routes));
+        $router->restoreCompiledRoutes($tree, $named, array_values($routes), $domainTrees, $domainAliases);
+    }
+
+    private function decodeDomain(mixed $value): string {
+        $domain = $this->decodeString($value);
+        if (Hostname::normalize($domain) !== $domain) {
+            throw new UnexpectedValueException('A compiled domain must be a normalized hostname.');
+        }
+        return $domain;
+    }
+
+    private function validateTreeDomain(mixed $node, ?string $domain): void {
+        if ($node instanceof Route) {
+            if ($node->getDomain() !== $domain) {
+                throw new UnexpectedValueException('A compiled route belongs to a different domain tree.');
+            }
+            return;
+        }
+        if ($node instanceof RouteParameter) {
+            $this->validateTreeDomain($node->routes, $domain);
+            return;
+        }
+        if ( ! is_array($node)) {
+            throw new UnexpectedValueException('A compiled domain tree contains an invalid node.');
+        }
+        foreach ($node as $child) {
+            $this->validateTreeDomain($child, $domain);
+        }
     }
 
     /**
@@ -706,6 +768,7 @@ final class CompiledRouteCache
                 throw new UnexpectedValueException('The compiled route object pool contains a non-object value.');
             }
         }
+        /** @var list<object> $objects Validated element by element above. */
         return $objects;
     }
 

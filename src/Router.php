@@ -6,11 +6,14 @@ namespace Lsr\Core\Routing;
 
 use Generator;
 use InvalidArgumentException;
+use LogicException;
+use Lsr\Core\Routing\Attributes\Domain;
 use Lsr\Core\Routing\Attributes\Meta;
 use Lsr\Core\Routing\Attributes\Route as RouteAttribute;
 use Lsr\Core\Routing\Attributes\Sitemap;
 use Lsr\Core\Routing\Attributes\SitemapExclude;
 use Lsr\Core\Routing\Cache\CompiledRouteCache;
+use Lsr\Core\Routing\Domain\Hostname;
 use Lsr\Core\Routing\Exceptions\DuplicateNamedRouteException;
 use Lsr\Core\Routing\Exceptions\DuplicateRouteException;
 use Lsr\Core\Routing\Exceptions\MethodNotAllowedException;
@@ -18,6 +21,7 @@ use Lsr\Core\Routing\Exceptions\MiddlewareGroupNotFoundException;
 use Lsr\Core\Routing\Exceptions\MiddlewareGroupsResolvedException;
 use Lsr\Core\Routing\Exceptions\RouteCacheCompilationException;
 use Lsr\Core\Routing\Exceptions\ServiceReferenceException;
+use Lsr\Core\Routing\Interfaces\DomainRouteInterface;
 use Lsr\Core\Routing\Interfaces\LocalizableRouteInterface;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Core\Routing\Interfaces\ServiceResolverInterface;
@@ -45,6 +49,15 @@ class Router
     public static array $availableRoutes = [];
     /** @var array<string, RouteInterface> Array of named routes with their names as array keys */
     public static array $namedRoutes = [];
+    /** @var array<array-key,array<string,RouteNode>> Host-scoped trees never enter the unrestricted table. */
+    private static array $domainRoutes = [];
+    /** @var array<int,true> Routers with declarations not yet safe to match. */
+    private static array $pendingDomainOwners = [];
+    /** @var array<array-key,string> Alias to normalized concrete hostname. */
+    private array $domainAliases = [];
+    /** @var array<int,Route> */
+    private array $pendingDomainRoutes = [];
+    private bool $domainsResolved = false;
 
     /** @var array<non-empty-string,list<MiddlewareInterface|ServiceReference>> */
     private array $middlewareGroups = [];
@@ -177,8 +190,9 @@ class Router
     }
 
     private function isRegisteredRoute(Route $route): bool {
+        $domain = $route->getDomain();
         /** @var array<array-key,mixed> $node The matcher contains nested nodes and numeric leaf keys. */
-        $node = self::$availableRoutes;
+        $node = $domain === null ? self::$availableRoutes : (self::$domainRoutes[$domain] ?? []);
         foreach ($route->getPath() as $part) {
             $child = $node[strtolower($part)] ?? null;
             if ($child instanceof RouteParameter) {
@@ -194,6 +208,71 @@ class Router
             $methods = $methods->routes;
         }
         return is_array($methods) && ($methods[self::FIRST_ROUTE_KEY] ?? null) === $route;
+    }
+
+    public function declareDomain(string $domain, string $alias): self {
+        if ($this->domainsResolved) {
+            throw new LogicException('Domain declarations are already resolved.');
+        }
+        if ($alias === '') {
+            throw new InvalidArgumentException('A domain alias must not be empty.');
+        }
+        $domain = Hostname::normalize($domain);
+        if (isset($this->domainAliases[$alias]) && $this->domainAliases[$alias] !== $domain) {
+            throw new InvalidArgumentException(sprintf('Domain alias "%s" is already declared for another hostname.', $alias));
+        }
+        $this->domainAliases[$alias] = $domain;
+        return $this;
+    }
+
+    public function domain(string $domain): RouteGroup {
+        if ($domain === '') {
+            throw new InvalidArgumentException('A domain constraint must not be empty.');
+        }
+        return new RouteGroup($this, domainReference: $domain);
+    }
+
+    /** Finalize inline declarations, or automatically finalize after loading all route sources. */
+    public function resolveDomains(): void {
+        if ($this->domainsResolved) {
+            return;
+        }
+        foreach ($this->routeGroups as $group) {
+            $reference = $group->getDomainReference();
+            if ($reference !== null) {
+                $this->resolveDomainReference($reference);
+            }
+        }
+        $trees = self::$domainRoutes;
+        foreach ($this->pendingDomainRoutes as $route) {
+            $reference = $route->getDomainReference();
+            assert($reference !== null);
+            $domain = $this->resolveDomainReference($reference);
+            $route->resolveDomain($domain);
+            $trees[$domain] ??= [];
+            $this->indexRoute($route, $trees[$domain]);
+        }
+        self::$domainRoutes = $trees;
+        $this->pendingDomainRoutes = [];
+        $this->domainsResolved = true;
+        unset(self::$pendingDomainOwners[spl_object_id($this)]);
+    }
+
+    private function resolveDomainReference(string $reference): string {
+        return $this->domainAliases[$reference] ?? Hostname::normalize($reference);
+    }
+
+    /** @return array<array-key,array<string,RouteNode>> */
+    public function getDomainRoutes(): array {
+        if (self::$pendingDomainOwners !== []) {
+            throw new LogicException('Resolve domain declarations before reading the domain route tables.');
+        }
+        return self::$domainRoutes;
+    }
+
+    /** @return array<array-key,string> */
+    public function getDomainAliases(): array {
+        return $this->domainAliases;
     }
 
     public function serviceRef(string $service): ServiceReference {
@@ -490,7 +569,18 @@ class Router
      *
      * @throws MethodNotAllowedException
      */
-    public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null): ?RouteInterface {
+    public static function getRoute(RequestMethod $type, array $path, array &$params = [], ?array $routes = null, ?string $host = null): ?RouteInterface {
+        if ($routes === null && $host !== null && $host !== '') {
+            if (self::$pendingDomainOwners !== []) {
+                throw new LogicException('Resolve domain declarations before matching a request host.');
+            }
+            if (self::$domainRoutes !== []) {
+                return self::getHostRoute($type, $path, $params, Hostname::normalize($host));
+            }
+        }
+        if ($routes === null && self::$domainRoutes !== [] && ($host === null || $host === '')) {
+            return self::getHostRoute($type, $path, $params, '');
+        }
         if ( ! isset($routes)) {
             $routes = self::$availableRoutes; // Default routes value
         }
@@ -522,6 +612,7 @@ class Router
             // Exactly one available parameter found
             if ($paramRouteCount === 1) {
                 $key = array_key_first($paramRoutes);
+                assert($key !== null);
                 $paramRoute = $paramRoutes[$key];
 
                 $name = $paramRoute->name;
@@ -630,6 +721,66 @@ class Router
         throw new MethodNotAllowedException(
             'Method ' . $type->value . ' is not allowed for path /' . implode('/', $path),
         );
+    }
+
+    /**
+     * Host routes take precedence; unrestricted routes remain a per-method fallback.
+     * Failed candidates never contribute parameters or methods from another host.
+     *
+     * @param string[] $path
+     * @param array<string,mixed> $params
+     */
+    private static function getHostRoute(RequestMethod $type, array $path, array &$params, string $host): ?RouteInterface {
+        $trees = [];
+        if (isset(self::$domainRoutes[$host])) {
+            $trees[] = self::$domainRoutes[$host];
+        }
+        $trees[] = self::$availableRoutes;
+        $methodFailure = null;
+        $options = null;
+        $optionsParams = [];
+        $allowed = [];
+        foreach ($trees as $tree) {
+            $candidateParams = $params;
+            try {
+                $route = self::getRoute($type, $path, $candidateParams, $tree);
+            } catch (MethodNotAllowedException $exception) {
+                // The legacy matcher also throws for empty method leaves. Only a
+                // successful OPTIONS probe establishes an actual 405 for this host.
+                $probeParams = $params;
+                try {
+                    if (self::getRoute(RequestMethod::OPTIONS, $path, $probeParams, $tree) !== null) {
+                        $methodFailure ??= $exception;
+                    }
+                } catch (MethodNotAllowedException) {
+                }
+                continue;
+            }
+            if ($route === null) {
+                continue;
+            }
+            if ($route instanceof OptionsRoute) {
+                $options ??= $route;
+                if ($options === $route) {
+                    $optionsParams = $candidateParams;
+                }
+                foreach ($route->allowedMethods as $method) {
+                    $allowed[$method->value] = $method;
+                }
+                continue;
+            }
+            $params = $candidateParams;
+            return $route;
+        }
+        if ($options !== null) {
+            assert($allowed !== []);
+            $params = $optionsParams;
+            return OptionsRoute::createFallback(array_values($allowed), $options->getPath(), $options->getReadable());
+        }
+        if ($methodFailure !== null) {
+            throw $methodFailure;
+        }
+        return null;
     }
 
     /**
@@ -866,6 +1017,7 @@ class Router
         }
 
         $this->resolveRouteDependencies();
+        $this->resolveDomains();
         return [self::$availableRoutes, self::$namedRoutes];
     }
 
@@ -934,6 +1086,7 @@ class Router
     private function loadRoutesFromController(string|object $controller): void {
         // Initiate reflection class and get methods
         $reflection = new ReflectionClass($controller);
+        $classDomain = $reflection->getAttributes(Domain::class)[0] ?? null;
         foreach ($reflection->getMethods() as $method) {
             // Find attributes of type Route
             $attributes = $method->getAttributes(RouteAttribute::class, ReflectionAttribute::IS_INSTANCEOF);
@@ -943,6 +1096,12 @@ class Router
 
                 // Create normal web route
                 $route = Route::create($routeAttr->method, $routeAttr->path, [$controller, $method->getName()]);
+                $methodDomain = $method->getAttributes(Domain::class)[0] ?? null;
+                $route->setDomain(
+                    $routeAttr->domain
+                    ?? $methodDomain?->newInstance()->domain
+                    ?? $classDomain?->newInstance()->domain,
+                );
                 foreach ($method->getAttributes(Meta::class) as $metaAttribute) {
                     $route->meta($metaAttribute->newInstance()->data);
                 }
@@ -952,7 +1111,6 @@ class Router
                 if ($method->getAttributes(SitemapExclude::class) !== []) {
                     $route->sitemapExclude();
                 }
-                $route->setRouter($this);
                 $this->register($route);
                 if ( ! empty($routeAttr->name)) {
                     $test = $this->getRouteByName($routeAttr->name);
@@ -975,11 +1133,38 @@ class Router
      */
     public function register(RouteInterface $route): void {
         if ($route instanceof Route) {
+            $reference = $route->getDomainReference();
+            if ($reference !== null && ! $this->domainsResolved) {
+                $route->setRouter($this);
+                $this->pendingDomainRoutes[spl_object_id($route)] = $route;
+                $this->ownedRoutes[spl_object_id($route)] = $route;
+                self::$pendingDomainOwners[spl_object_id($this)] = true;
+                return;
+            }
+            if ($reference !== null) {
+                $route->resolveDomain($this->resolveDomainReference($reference));
+            }
+        }
+        $domain = $route instanceof DomainRouteInterface ? $route->getDomain() : null;
+        if ($domain === null) {
+            $this->indexRoute($route, self::$availableRoutes);
+        } else {
+            $domain = Hostname::normalize($domain);
+            self::$domainRoutes[$domain] ??= [];
+            $this->indexRoute($route, self::$domainRoutes[$domain]);
+        }
+        if ($route instanceof Route) {
+            $this->ownedRoutes[spl_object_id($route)] = $route;
             $route->setRouter($this);
         }
-        $routes = &self::$availableRoutes;
-        $type = $route->getMethod();
+    }
 
+    /**
+     * @param array<string,RouteNode> $tree
+     */
+    private function indexRoute(RouteInterface $route, array &$tree): void {
+        $routes = &$tree;
+        $type = $route->getMethod();
         // Walk through the path and create a nested array structure
         foreach ($route->getPath() as $name) {
             $isParam = preg_match('/' . self::ANY_PARAM_REGEX . '/', $name, $matches) > 0;
@@ -1034,9 +1219,6 @@ class Router
             throw new DuplicateRouteException($routes[self::FIRST_ROUTE_KEY], $route);
         }
         $routes[self::FIRST_ROUTE_KEY] = $route;
-        if ($route instanceof Route) {
-            $this->ownedRoutes[spl_object_id($route)] = $route;
-        }
     }
 
     /**
@@ -1062,8 +1244,12 @@ class Router
     }
 
     public function addParameterValidators(Route $route): void {
+        if (isset($this->pendingDomainRoutes[spl_object_id($route)])) {
+            return;
+        }
         // Go through route's path and add validators to all found parameters
-        $routes = self::$availableRoutes;
+        $domain = $route->getDomain();
+        $routes = $domain === null ? self::$availableRoutes : (self::$domainRoutes[$domain] ?? []);
         foreach ($route->getPath() as $part) {
             $part = strtolower($part); // Normalize
             assert(is_array($routes));
@@ -1098,6 +1284,11 @@ class Router
         $this->ownedRoutes = [];
         $this->routeGroups = [];
         $this->middlewareGroupsResolved = false;
+        self::$domainRoutes = [];
+        self::$pendingDomainOwners = [];
+        $this->domainAliases = [];
+        $this->pendingDomainRoutes = [];
+        $this->domainsResolved = false;
     }
 
     /**
@@ -1105,14 +1296,21 @@ class Router
      * @param array<string,RouteNode>      $availableRoutes
      * @param array<string,RouteInterface> $namedRoutes
      * @param list<Route>                  $routes
+     * @param array<array-key,array<string,RouteNode>> $domainRoutes
+     * @param array<array-key,string> $domainAliases
      */
-    public function restoreCompiledRoutes(array $availableRoutes, array $namedRoutes, array $routes): void {
+    public function restoreCompiledRoutes(array $availableRoutes, array $namedRoutes, array $routes, array $domainRoutes = [], array $domainAliases = []): void {
         self::$availableRoutes = $availableRoutes;
         self::$namedRoutes = $namedRoutes;
         $this->middlewareGroups = [];
         $this->routeGroups = [];
         $this->ownedRoutes = [];
         $this->middlewareGroupsResolved = true;
+        self::$domainRoutes = $domainRoutes;
+        self::$pendingDomainOwners = [];
+        $this->domainAliases = $domainAliases;
+        $this->pendingDomainRoutes = [];
+        $this->domainsResolved = true;
         foreach ($routes as $route) {
             $this->ownedRoutes[spl_object_id($route)] = $route;
             $route->setRouter($this);
@@ -1125,8 +1323,23 @@ class Router
             unset(self::$namedRoutes[$route->getName()]);
         }
 
+        if (isset($this->pendingDomainRoutes[spl_object_id($route)])) {
+            unset($this->pendingDomainRoutes[spl_object_id($route)], $this->ownedRoutes[spl_object_id($route)]);
+            if ($this->pendingDomainRoutes === []) {
+                unset(self::$pendingDomainOwners[spl_object_id($this)]);
+            }
+            return;
+        }
         // Unregister from available routes
-        $routes = &self::$availableRoutes;
+        $domain = $route instanceof DomainRouteInterface ? $route->getDomain() : null;
+        if ($domain !== null) {
+            if ( ! isset(self::$domainRoutes[$domain])) {
+                return;
+            }
+            $routes = &self::$domainRoutes[$domain];
+        } else {
+            $routes = &self::$availableRoutes;
+        }
         foreach ($route->getPath() as $name) {
             $lowerName = strtolower($name);
             if ( ! isset($routes[$lowerName])) {
@@ -1193,13 +1406,15 @@ class Router
      *
      * @return Route
      */
-    public function route(RequestMethod $method, string $pathString, callable|array|RouteInterface $handler): Route {
+    public function route(RequestMethod $method, string $pathString, callable|array|RouteInterface $handler, ?RouteGroup $group = null): Route {
         if ($handler instanceof RouteInterface) {
             $route = AliasRoute::createAlias($method, $pathString, $handler);
         } else {
             $route = Route::create($method, $pathString, $handler);
         }
-        $route->setRouter($this);
+        if ($group !== null) {
+            $route->setGroup($group);
+        }
         $this->register($route);
         return $route;
     }

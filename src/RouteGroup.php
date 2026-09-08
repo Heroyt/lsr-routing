@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Lsr\Core\Routing;
 
+use InvalidArgumentException;
 use Lsr\Core\Routing\Interfaces\RouteParamValidatorInterface;
 use Lsr\Core\Routing\Sitemap\SitemapChangeFrequency;
 use Lsr\Core\Routing\Sitemap\SitemapDefinition;
@@ -34,6 +35,7 @@ class RouteGroup
         protected readonly Router $router,
         public readonly string         $path = '',
         protected readonly ?RouteGroup $parent = null,
+        private readonly ?string $domainReference = null,
     ) {
         $this->sitemapDefinition = new SitemapDefinition($parent?->getSitemapDefinition());
         $this->routeMetadata = new RouteMetadata($parent?->getMetadataDefinition());
@@ -77,8 +79,7 @@ class RouteGroup
      * @throws Exceptions\DuplicateRouteException
      */
     public function route(RequestMethod $method, string $path, array|callable|RouteInterface $handler): static {
-        $route = $this->router->route($method, $this->combinePaths($path), $handler);
-        $route->setGroup($this);
+        $route = $this->router->route($method, $this->combinePaths($path), $handler, $this);
         // Add an already added middleware to the route
         $route->middleware(...$this->middleware);
         foreach ($this->paramValidators as $name => $validators) {
@@ -409,8 +410,28 @@ class RouteGroup
     public function group(string $path): RouteGroup {
         $group = new self($this->router, $this->combinePaths($path), $this);
         $group->middlewareAll(...$this->middleware);
+        if ($this->getDomainReference() !== null) {
+            $group->paramValidators = $this->paramValidators;
+        }
         $this->groups[$path] = $group;
         return $group;
+    }
+
+    /** Create a child scope without changing existing routes or the current path prefix. */
+    public function domain(string $domain): RouteGroup {
+        if ($domain === '') {
+            throw new InvalidArgumentException('A domain constraint must not be empty.');
+        }
+        $group = new self($this->router, $this->path, $this, $domain);
+        $group->middlewareAll(...$this->middleware);
+        $group->paramValidators = $this->paramValidators;
+        $this->groups['domain:' . spl_object_id($group)] = $group;
+        return $group;
+    }
+
+    /** @internal Domain references are inherited until all declarations can be resolved. */
+    public function getDomainReference(): ?string {
+        return $this->domainReference ?? $this->parent?->getDomainReference();
     }
 
     /**

@@ -36,6 +36,7 @@ class DuplicateRouteException extends RuntimeException
      */
     protected function printCallable(array|callable $callable): string {
         if (is_array($callable)) {
+            /** @var array{0: class-string|object, 1: string} $callable */
             $str = '';
             if (is_object($callable[0])) {
                 $str .= $callable[0]::class;
