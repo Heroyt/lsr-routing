@@ -227,7 +227,7 @@ class Router
     }
 
     /**
-     * @param list<MiddlewareInterface|string|ServiceReference> $middleware
+     * @param array<array-key,MiddlewareInterface|string|ServiceReference> $middleware
      */
     public function assertMiddlewareEntriesAllowed(array $middleware): void {
         if (array_any($middleware, static fn (mixed $entry): bool => is_string($entry))) {
@@ -329,7 +329,6 @@ class Router
             $middleware = $definition instanceof ServiceReference
                 ? $this->resolveServiceReference($definition, MiddlewareInterface::class)
                 : $definition;
-            assert($middleware instanceof MiddlewareInterface);
             if (in_array($middleware, $resolvedMiddleware, true)) {
                 continue;
             }
@@ -345,7 +344,6 @@ class Router
                 $validator = $definition instanceof ServiceReference
                     ? $this->resolveServiceReference($definition, RouteParamValidatorInterface::class)
                     : $definition;
-                assert($validator instanceof RouteParamValidatorInterface);
                 if (in_array($validator, $resolvedValidators[$name] ?? [], true)) {
                     continue;
                 }
@@ -373,7 +371,9 @@ class Router
 
     /**
      * @internal
-     * @param class-string $expectedType
+     * @template T of object
+     * @param class-string<T> $expectedType
+     * @return T
      */
     public function resolveServiceId(string $serviceId, string $expectedType): object {
         if ($this->serviceResolver === null) {
@@ -396,7 +396,9 @@ class Router
     }
 
     /**
-     * @param class-string $expectedType
+     * @template T of object
+     * @param class-string<T> $expectedType
+     * @return T
      */
     private function resolveServiceReference(ServiceReference $reference, string $expectedType): object {
         return $this->resolveServiceId($this->getServiceId($reference), $expectedType);
@@ -404,6 +406,7 @@ class Router
 
     /**
      * @param list<MiddlewareInterface|string|ServiceReference> $middleware
+     * @param non-empty-string $context
      * @param array<non-empty-string,list<non-empty-string>>     $missing
      */
     private function collectMissingMiddlewareGroups(array $middleware, string $context, array &$missing): void {
@@ -882,9 +885,9 @@ class Router
         $Iterator = new RecursiveIteratorIterator($Directory);
         $Regex = new RegexIterator($Iterator, '/^.+\.php$/i', RegexIterator::GET_MATCH);
 
-        /** @var string $classFile */
-        foreach ($Regex as [$classFile]) {
-            $this->loadRoutesFromControllerFile($classFile, $files);
+        /** @var array{0:string} $match */
+        foreach ($Regex as $match) {
+            $this->loadRoutesFromControllerFile($match[0], $files);
         }
     }
 
