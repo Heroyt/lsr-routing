@@ -40,7 +40,7 @@ class RouteParameter implements ArrayAccess, Stringable, Countable, Iterator
     }
 
     public function offsetSet(mixed $offset, mixed $value): void {
-        $this->routes[$offset] = $value;
+        $this->routes[$offset ?? ''] = $value;
     }
 
     public function offsetUnset(mixed $offset): void {
