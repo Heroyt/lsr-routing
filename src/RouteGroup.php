@@ -230,7 +230,7 @@ class RouteGroup
         foreach ($this->groups as $group) {
             $group->middlewareAll(...$middleware);
         }
-        $this->middleware = array_merge($this->middleware, $middleware);
+        $this->middleware = array_merge($this->middleware, array_values($middleware));
         return $this;
     }
 
@@ -435,7 +435,20 @@ class RouteGroup
         RouteParamValidatorInterface|ServiceReference ...$validators,
     ): RouteGroup {
         if (isset($this->activeRoute)) {
-            $this->activeRoute->param($name, ...$validators);
+            if ($this->activeRoute instanceof Route) {
+                $this->activeRoute->param($name, ...$validators);
+            } else {
+                $resolved = [];
+                foreach ($validators as $validator) {
+                    $resolved[] = $validator instanceof ServiceReference
+                        ? $this->router->resolveServiceId(
+                            $this->router->getServiceId($validator),
+                            RouteParamValidatorInterface::class,
+                        )
+                        : $validator;
+                }
+                $this->activeRoute->param($name, ...$resolved);
+            }
             return $this;
         }
 
@@ -452,7 +465,7 @@ class RouteGroup
         string $name,
         RouteParamValidatorInterface|ServiceReference ...$validators,
     ): RouteGroup {
-        $this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], $validators);
+        $this->paramValidators[$name] = array_merge($this->paramValidators[$name] ?? [], array_values($validators));
         foreach ($this->routes as $route) {
             if ($route instanceof Route) {
                 $route->param($name, ...$validators);
