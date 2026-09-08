@@ -14,6 +14,7 @@ use Lsr\Core\Routing\Route;
 use Lsr\Core\Routing\RouteParameter;
 use Lsr\Core\Routing\Router;
 use Lsr\Core\Routing\ServiceReference;
+use Lsr\Core\Routing\Sitemap\SitemapDefinition;
 use Lsr\Enums\RequestMethod;
 use Lsr\Interfaces\RouteInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -24,6 +25,13 @@ use SplObjectStorage;
 use Throwable;
 use UnexpectedValueException;
 
+/**
+ * @phpstan-type CompiledDependency array{type:'service',id:string}|array{type:'object',id:int}
+ * @phpstan-type CompiledHandler array{type:'callable',value:string}|array{type:'class_method',class:class-string,method:string}|array{type:'object_method',object:CompiledDependency,method:string}|array{type:'closure',dependency:CompiledDependency}
+ * @phpstan-import-type SitemapDefinitionData from SitemapDefinition
+ * @phpstan-type CompiledRouteDefinition array{type:'route'|'localized'|'alias',method:string,path:string,name:string,locale:?string,middleware:list<CompiledDependency>,validators:array<non-empty-string,list<CompiledDependency>>,localized:array<string,int>,sitemap:SitemapDefinitionData|null,meta:array<string,mixed>|null,parent?:int,redirectTo?:int,handler?:CompiledHandler}
+ * @phpstan-type CompiledRoutes array{version:int,manifest:array<string,int|null>,tree:array<string,mixed>,routes:array<int,CompiledRouteDefinition>,named:array<string,int>,objects:string}
+ */
 final class CompiledRouteCache
 {
     private const int FORMAT_VERSION = 3;
@@ -96,7 +104,7 @@ final class CompiledRouteCache
     }
 
     /**
-     * @return array<string,mixed>
+     * @return CompiledRoutes
      */
     private function encode(Router $router): array {
         /** @var SplObjectStorage<Route,int> $routeIds */
@@ -260,7 +268,7 @@ final class CompiledRouteCache
      * @param SplObjectStorage<object,int>                                    $objectIds
      * @param list<object>                                                     $objects
      * @param array<int,list<string>>                                          $objectContexts
-     * @return array<string,mixed>
+     * @return CompiledHandler
      */
     private function encodeHandler(
         string|array|SerializableClosure $handler,
@@ -308,7 +316,7 @@ final class CompiledRouteCache
      * @param SplObjectStorage<object,int> $objectIds
      * @param list<object>                  $objects
      * @param array<int,list<string>>       $objectContexts
-     * @return array{type:'service',id:string}|array{type:'object',id:int}
+     * @return CompiledDependency
      */
     private function encodeDependency(
         object $dependency,
@@ -380,14 +388,11 @@ final class CompiledRouteCache
     }
 
     /**
-     * @param array<string,mixed> $data
+     * @param array<array-key,mixed> $data
      */
     private function hydrate(Router $router, array $data): void {
         $objects = $this->unserializeObjectPool($data['objects'] ?? null);
-        $definitions = $data['routes'] ?? null;
-        if ( ! is_array($definitions)) {
-            throw new UnexpectedValueException('Compiled route definitions are missing.');
-        }
+        $definitions = $this->decodeRouteDefinitions($data['routes'] ?? null);
 
         /** @var array<int,Route> $routes */
         $routes = [];
@@ -395,12 +400,9 @@ final class CompiledRouteCache
         while ($remaining !== []) {
             $progress = false;
             foreach ($remaining as $id => $definition) {
-                if ( ! is_array($definition)) {
-                    throw new UnexpectedValueException('A compiled route definition is invalid.');
-                }
                 $type = $definition['type'] ?? null;
-                $method = RequestMethod::from((string) ($definition['method'] ?? ''));
-                $path = (string) ($definition['path'] ?? '');
+                $method = RequestMethod::from($this->decodeString($definition['method'] ?? ''));
+                $path = $this->decodeString($definition['path'] ?? '');
 
                 if ($type === 'route') {
                     $route = Route::create($method, $path, $this->decodeHandler($definition['handler'] ?? null, $objects));
@@ -412,7 +414,7 @@ final class CompiledRouteCache
                     $route = LocalizedRoute::createLocalized(
                         $method,
                         $path,
-                        (string) ($definition['locale'] ?? ''),
+                        $this->decodeString($definition['locale'] ?? ''),
                         $routes[$parentId],
                     );
                 } elseif ($type === 'alias') {
@@ -422,10 +424,10 @@ final class CompiledRouteCache
                     }
                     $route = AliasRoute::createAlias($method, $path, $routes[$targetId]);
                 } else {
-                    throw new UnexpectedValueException(sprintf('Unknown compiled route type "%s".', (string) $type));
+                    throw new UnexpectedValueException('Unknown compiled route type.');
                 }
 
-                $route->setName((string) ($definition['name'] ?? ''));
+                $route->setName($this->decodeString($definition['name'] ?? ''));
                 if ( ! $route instanceof LocalizedRoute) {
                     $metadata = $definition['meta'] ?? null;
                     if ( ! is_array($metadata)) {
@@ -440,13 +442,17 @@ final class CompiledRouteCache
                     }
                     $route->restoreSitemapDefinition($sitemap);
                 }
-                foreach (($definition['middleware'] ?? []) as $dependency) {
+                foreach ($this->decodeArray($definition['middleware'] ?? []) as $dependency) {
                     $route->middleware($this->decodeDependency($dependency, $objects, $router, MiddlewareInterface::class));
                 }
-                foreach (($definition['validators'] ?? []) as $name => $validators) {
-                    foreach ($validators as $dependency) {
+                foreach ($this->decodeArray($definition['validators'] ?? []) as $name => $validators) {
+                    $name = (string) $name;
+                    if ($name === '') {
+                        throw new UnexpectedValueException('A compiled route parameter name must not be empty.');
+                    }
+                    foreach ($this->decodeArray($validators) as $dependency) {
                         $route->param(
-                            (string) $name,
+                            $name,
                             $this->decodeDependency(
                                 $dependency,
                                 $objects,
@@ -456,7 +462,7 @@ final class CompiledRouteCache
                         );
                     }
                 }
-                $routes[(int) $id] = $route;
+                $routes[$id] = $route;
                 unset($remaining[$id]);
                 $progress = true;
             }
@@ -467,13 +473,13 @@ final class CompiledRouteCache
 
         foreach ($definitions as $id => $definition) {
             $localized = [];
-            foreach (($definition['localized'] ?? []) as $locale => $localizedId) {
+            foreach ($this->decodeArray($definition['localized'] ?? []) as $locale => $localizedId) {
                 if ( ! is_int($localizedId) || ! isset($routes[$localizedId])) {
                     throw new UnexpectedValueException('A compiled localized route reference is invalid.');
                 }
                 $localized[(string) $locale] = $routes[$localizedId];
             }
-            $routes[(int) $id]->restoreLocalization(
+            $routes[$id]->restoreLocalization(
                 isset($definition['locale']) && is_string($definition['locale']) ? $definition['locale'] : null,
                 $localized,
             );
@@ -484,7 +490,7 @@ final class CompiledRouteCache
             throw new UnexpectedValueException('The compiled route tree root must be an array.');
         }
         $named = [];
-        foreach (($data['named'] ?? []) as $name => $id) {
+        foreach ($this->decodeArray($data['named'] ?? []) as $name => $id) {
             if ( ! is_int($id) || ! isset($routes[$id])) {
                 throw new UnexpectedValueException('A compiled named route reference is invalid.');
             }
@@ -496,6 +502,53 @@ final class CompiledRouteCache
     }
 
     /**
+     * @return array<int,array<array-key,mixed>>
+     */
+    private function decodeRouteDefinitions(mixed $definitions): array {
+        $definitions = $this->decodeArray($definitions);
+        foreach ($definitions as $id => $definition) {
+            if ( ! is_int($id) || ! is_array($definition)) {
+                throw new UnexpectedValueException('A compiled route definition or ID is invalid.');
+            }
+        }
+        /** @var array<int,array<array-key,mixed>> $definitions */
+        return $definitions;
+    }
+
+    /** @return array<array-key,mixed> */
+    private function decodeArray(mixed $value): array {
+        if ( ! is_array($value)) {
+            throw new UnexpectedValueException('A compiled route field must be an array.');
+        }
+        return $value;
+    }
+
+    private function decodeString(mixed $value): string {
+        if ( ! is_string($value)) {
+            throw new UnexpectedValueException('A compiled route field must be a string.');
+        }
+        return $value;
+    }
+
+    /** @return callable-string */
+    private function decodeCallableString(mixed $value): string {
+        if ( ! is_string($value) || ! is_callable($value)) {
+            throw new UnexpectedValueException('A compiled route handler is not callable.');
+        }
+        return $value;
+    }
+
+    /** @return class-string */
+    private function decodeClassString(mixed $value): string {
+        if ( ! is_string($value) || $value === '') {
+            throw new UnexpectedValueException('A compiled route handler class is invalid.');
+        }
+        // Restoring routes must not autoload their controllers before dispatch.
+        /** @var class-string $value */
+        return $value;
+    }
+
+    /**
      * @param list<object> $objects
      * @return callable|array{0:class-string|object,1:string}
      */
@@ -504,11 +557,14 @@ final class CompiledRouteCache
             throw new UnexpectedValueException('A compiled route handler is invalid.');
         }
         return match ($definition['type'] ?? null) {
-            'callable' => (string) ($definition['value'] ?? ''),
-            'class_method' => [(string) ($definition['class'] ?? ''), (string) ($definition['method'] ?? '')],
+            'callable' => $this->decodeCallableString($definition['value'] ?? null),
+            'class_method' => [
+                $this->decodeClassString($definition['class'] ?? null),
+                $this->decodeString($definition['method'] ?? ''),
+            ],
             'object_method' => [
                 $this->decodeObjectDependency($definition['object'] ?? null, $objects),
-                (string) ($definition['method'] ?? ''),
+                $this->decodeString($definition['method'] ?? ''),
             ],
             'closure' => $this->decodeClosure($definition['dependency'] ?? null, $objects),
             default => throw new UnexpectedValueException('Unknown compiled route handler type.'),
@@ -527,15 +583,17 @@ final class CompiledRouteCache
     }
 
     /**
+     * @template T of object
      * @param list<object> $objects
-     * @param class-string $expectedType
+     * @param class-string<T> $expectedType
+     * @return T
      */
     private function decodeDependency(mixed $definition, array $objects, Router $router, string $expectedType): object {
         if ( ! is_array($definition)) {
             throw new UnexpectedValueException('A compiled route dependency is invalid.');
         }
         if (($definition['type'] ?? null) === 'service') {
-            return $router->resolveServiceId((string) ($definition['id'] ?? ''), $expectedType);
+            return $router->resolveServiceId($this->decodeString($definition['id'] ?? ''), $expectedType);
         }
         $object = $this->decodeObjectDependency($definition, $objects);
         if ( ! $object instanceof $expectedType) {
@@ -562,6 +620,7 @@ final class CompiledRouteCache
 
     /**
      * @param array<int,Route> $routes
+     * @return Route|RouteParameter|array<string,RouteNode>
      */
     private function decodeNode(mixed $definition, array $routes): mixed {
         if ( ! is_array($definition)) {
@@ -570,17 +629,20 @@ final class CompiledRouteCache
         return match ($definition['type'] ?? null) {
             'route' => $this->decodeRouteNode($definition, $routes),
             'parameter' => new RouteParameter(
-                (string) ($definition['name'] ?? ''),
+                $this->decodeString($definition['name'] ?? ''),
                 $this->decodeArrayNode($definition['routes'] ?? null, $routes),
                 optional: (bool) ($definition['optional'] ?? false),
-                default: isset($definition['default']) ? (string) $definition['default'] : null,
+                default: isset($definition['default']) ? $this->decodeString($definition['default']) : null,
             ),
             'array' => $this->decodeArrayChildren($definition['children'] ?? null, $routes),
             default => throw new UnexpectedValueException('Unknown compiled matcher node type.'),
         };
     }
 
-    /** @param array<int,Route> $routes */
+    /**
+     * @param array<array-key,mixed> $definition
+     * @param array<int,Route> $routes
+     */
     private function decodeRouteNode(array $definition, array $routes): Route {
         $id = $definition['id'] ?? null;
         if ( ! is_int($id) || ! isset($routes[$id])) {
@@ -589,7 +651,10 @@ final class CompiledRouteCache
         return $routes[$id];
     }
 
-    /** @param array<int,Route> $routes */
+    /**
+     * @param array<int,Route> $routes
+     * @return array<string,RouteNode>
+     */
     private function decodeArrayNode(mixed $definition, array $routes): array {
         $node = $this->decodeNode($definition, $routes);
         if ( ! is_array($node)) {
@@ -598,14 +663,20 @@ final class CompiledRouteCache
         return $node;
     }
 
-    /** @param array<int,Route> $routes */
+    /**
+     * @param array<int,Route> $routes
+     * @return array<string,RouteNode>
+     */
     private function decodeArrayChildren(mixed $children, array $routes): array {
         if ( ! is_array($children)) {
             throw new UnexpectedValueException('Compiled matcher children must be an array.');
         }
         $decoded = [];
         foreach ($children as $key => $child) {
-            $decoded[(string) $key] = $this->decodeNode($child, $routes);
+            // RouteNode is the routing API's finite approximation of recursive matcher subtrees.
+            /** @var RouteNode $node */
+            $node = $this->decodeNode($child, $routes);
+            $decoded[(string) $key] = $node;
         }
         return $decoded;
     }
@@ -658,8 +729,9 @@ final class CompiledRouteCache
             }
             $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($source));
             $matches = new RegexIterator($iterator, '/^.+\.php$/i', RegexIterator::GET_MATCH);
-            foreach ($matches as [$file]) {
-                $files[] = $file;
+            /** @var array{0:string} $match */
+            foreach ($matches as $match) {
+                $files[] = $match[0];
             }
         }
 
