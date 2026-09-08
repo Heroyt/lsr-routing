@@ -40,10 +40,8 @@ class DuplicateRouteException extends RuntimeException
             if (is_object($callable[0])) {
                 $str .= $callable[0]::class;
             } else {
-                assert(is_string($callable[0]));
                 $str .= $callable[0];
             }
-            assert(is_string($callable[1]));
             $str .= '::' . $callable[1] . '()';
             return $str;
         }
