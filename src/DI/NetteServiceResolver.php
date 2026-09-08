@@ -26,6 +26,12 @@ final readonly class NetteServiceResolver implements ServiceResolverInterface
             return $reference->service;
         }
 
+        if ( ! class_exists($reference->service) && ! interface_exists($reference->service)) {
+            throw new ServiceReferenceException(
+                sprintf('Route service type "%s" does not exist.', $reference->service),
+            );
+        }
+
         $services = $this->container->findByType($reference->service);
         if (count($services) !== 1) {
             throw new ServiceReferenceException(

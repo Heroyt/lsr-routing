@@ -11,6 +11,7 @@ use Lsr\Core\Routing\Router;
 use Nette;
 use Nette\DI\CompilerExtension;
 use Symfony\Component\Console\Command\Command;
+use UnexpectedValueException;
 
 /**
  * @property object{
@@ -26,13 +27,13 @@ class RoutingExtension extends CompilerExtension
         return Nette\Schema\Expect::structure([
             'routeFiles' => Nette\Schema\Expect::listOf(
                 Nette\Schema\Expect::string()->assert(
-                    static fn (string $value) => file_exists($value),
+                    static fn (mixed $value): bool => is_string($value) && file_exists($value),
                     'Route file must be a valid file',
                 ),
             )->default([]),
             'controllers' => Nette\Schema\Expect::listOf(
                 Nette\Schema\Expect::string()->assert(
-                    static fn (string $value) => file_exists($value),
+                    static fn (mixed $value): bool => is_string($value) && file_exists($value),
                     'Route controller must be a valid file',
                 ),
             )->default([]),
@@ -74,7 +75,7 @@ class RoutingExtension extends CompilerExtension
                 '@' . $resolverName,
                 $this->config->sitemap->defaultIncluded,
             ])
-            ->setTags(['lsr', 'routing']);
+            ->setTags(['lsr' => true, 'routing' => true]);
         $router->lazy = false;
 
         if ( ! $this->config->cache->commands || ! class_exists(Command::class)) {
@@ -97,8 +98,11 @@ class RoutingExtension extends CompilerExtension
 
     private function getDefaultCacheFile(): string {
         $directory = defined('TMP_DIR')
-            ? (string) constant('TMP_DIR')
+            ? constant('TMP_DIR')
             : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'lsr';
+        if ( ! is_string($directory)) {
+            throw new UnexpectedValueException('TMP_DIR must be a string.');
+        }
         return rtrim($directory, '/\\') . DIRECTORY_SEPARATOR . 'routes.php';
     }
 
