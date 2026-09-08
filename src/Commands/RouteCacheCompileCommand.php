@@ -14,13 +14,11 @@ use Throwable;
 #[AsCommand(name: 'routes:cache:compile', description: 'Compile application routes into the PHP route cache.')]
 final class RouteCacheCompileCommand extends Command
 {
-    public function __construct(private readonly Router $router)
-    {
+    public function __construct(private readonly Router $router) {
         parent::__construct();
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output): int
-    {
+    protected function execute(InputInterface $input, OutputInterface $output): int {
         try {
             $this->router->compileCache();
         } catch (Throwable $exception) {

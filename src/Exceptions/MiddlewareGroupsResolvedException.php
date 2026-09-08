@@ -8,8 +8,7 @@ use LogicException;
 
 final class MiddlewareGroupsResolvedException extends LogicException
 {
-    public function __construct()
-    {
+    public function __construct() {
         parent::__construct('Middleware groups have already been resolved for this router.');
     }
 }

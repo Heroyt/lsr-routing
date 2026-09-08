@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Lsr\Core\Routing\Attributes;
 
 use Attribute;

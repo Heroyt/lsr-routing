@@ -21,20 +21,17 @@ final class SitemapDefinition
     private ?float $priority = null;
     private ?SitemapChangeFrequency $changefreq = null;
 
-    public function __construct(private ?self $parent = null)
-    {
+    public function __construct(private ?self $parent = null) {
     }
 
     /**
      * Only route-to-group or child-to-parent-group links are established by the routing API.
      */
-    public function setParent(self $parent): void
-    {
+    public function setParent(self $parent): void {
         $this->parent = $parent;
     }
 
-    public function sitemap(?string $name = null): void
-    {
+    public function sitemap(?string $name = null): void {
         if ($name !== null && trim($name) === '') {
             throw new InvalidArgumentException('A sitemap name must not be empty.');
         }
@@ -44,21 +41,18 @@ final class SitemapDefinition
         }
     }
 
-    public function sitemapExclude(): void
-    {
+    public function sitemapExclude(): void {
         $this->included = false;
     }
 
-    public function priority(float $priority): void
-    {
-        if (!is_finite($priority) || $priority < 0.0 || $priority > 1.0) {
+    public function priority(float $priority): void {
+        if ( ! is_finite($priority) || $priority < 0.0 || $priority > 1.0) {
             throw new InvalidArgumentException('Sitemap priority must be finite and between 0 and 1.');
         }
         $this->priority = $priority;
     }
 
-    public function changefreq(SitemapChangeFrequency|string $frequency): void
-    {
+    public function changefreq(SitemapChangeFrequency|string $frequency): void {
         $this->changefreq = is_string($frequency)
             ? SitemapChangeFrequency::tryFrom($frequency)
                 ?? throw new InvalidArgumentException('Invalid sitemap change frequency.')
@@ -71,8 +65,7 @@ final class SitemapDefinition
      *
      * @return SitemapDefinitionData
      */
-    public function export(): array
-    {
+    public function export(): array {
         $parent = $this->parent?->export();
         return [
             'included' => $this->included ?? $parent['included'] ?? null,
@@ -88,14 +81,13 @@ final class SitemapDefinition
      *
      * @param array<array-key, mixed> $definition
      */
-    public function restore(array $definition): void
-    {
+    public function restore(array $definition): void {
         if (
             count($definition) !== 4
-            || !array_key_exists('included', $definition)
-            || !array_key_exists('name', $definition)
-            || !array_key_exists('priority', $definition)
-            || !array_key_exists('changefreq', $definition)
+            || ! array_key_exists('included', $definition)
+            || ! array_key_exists('name', $definition)
+            || ! array_key_exists('priority', $definition)
+            || ! array_key_exists('changefreq', $definition)
         ) {
             throw new InvalidArgumentException('Invalid sitemap cache definition.');
         }
@@ -105,10 +97,10 @@ final class SitemapDefinition
         $priority = $definition['priority'];
         $frequency = $definition['changefreq'];
         if (
-            ($included !== null && !is_bool($included))
-            || ($name !== null && !is_string($name))
-            || ($priority !== null && !is_float($priority) && !is_int($priority))
-            || ($frequency !== null && !is_string($frequency))
+            ($included !== null && ! is_bool($included))
+            || ($name !== null && ! is_string($name))
+            || ($priority !== null && ! is_float($priority) && ! is_int($priority))
+            || ($frequency !== null && ! is_string($frequency))
         ) {
             throw new InvalidArgumentException('Invalid sitemap cache definition values.');
         }

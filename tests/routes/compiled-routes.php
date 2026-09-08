@@ -21,5 +21,5 @@ $this->get('/compiled-second', [DummyController::class, 'action'])
     ->middleware($shared)
     ->name('compiled-second');
 
-$this->get('/compiled-closure', static fn() => null)
+$this->get('/compiled-closure', static fn () => null)
     ->name('compiled-closure');

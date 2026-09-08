@@ -15,7 +15,7 @@ class OptionsRoute extends Route
      * @param string[]                      $path
      */
     public function __construct(
-        protected(set) array $allowedMethods,
+        public protected(set) array $allowedMethods,
         array $path = [],
         string $readablePath = '*',
     ) {
@@ -36,12 +36,11 @@ class OptionsRoute extends Route
         return new self($allowedMethods, $path, $readablePath);
     }
 
-    public function respond(): ResponseInterface
-    {
+    public function respond(): ResponseInterface {
         return Response::create(
             headers: [
                 'Allow' => implode(', ', array_map(
-                    static fn(RequestMethod $method): string => $method->value,
+                    static fn (RequestMethod $method): string => $method->value,
                     $this->allowedMethods,
                 )),
             ],

@@ -1,50 +1,52 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Lsr\Core\Routing;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use RuntimeException;
 
 class Dispatcher implements RequestHandlerInterface
 {
-
-	/**
+    /**
      * @param iterable<MiddlewareInterface|RequestHandlerInterface|callable> $queue
-	 */
-	public function __construct(
-		private iterable $queue,
-	) {
-	}
+     */
+    public function __construct(
+        private iterable $queue,
+    ) {
+    }
 
-	/**
-	 * @inheritDoc
-	 */
-	public function handle(ServerRequestInterface $request): ResponseInterface {
-		$current = current($this->queue);
-		next($this->queue);
+    /**
+     * @inheritDoc
+     */
+    public function handle(ServerRequestInterface $request): ResponseInterface {
+        $current = current($this->queue);
+        next($this->queue);
 
         if ($current instanceof MiddlewareInterface) {
-			return $current->process($request, $this);
-		}
+            return $current->process($request, $this);
+        }
 
-		if ($current instanceof RequestHandlerInterface) {
-			return $current->handle($request);
-		}
+        if ($current instanceof RequestHandlerInterface) {
+            return $current->handle($request);
+        }
 
-		if (is_callable($current)) {
-			$response = $current($request);
-			assert($response instanceof ResponseInterface);
-			return $response;
-		}
+        if (is_callable($current)) {
+            $response = $current($request);
+            assert($response instanceof ResponseInterface);
+            return $response;
+        }
 
-		throw new \RuntimeException(
-			sprintf(
-				'Invalid middleware queue entry: %s. Middleware must either be callable or implement %s.',
-				$current,
-                MiddlewareInterface::class
-			)
-		);
-	}
+        throw new RuntimeException(
+            sprintf(
+                'Invalid middleware queue entry: %s. Middleware must either be callable or implement %s.',
+                $current,
+                MiddlewareInterface::class,
+            ),
+        );
+    }
 }

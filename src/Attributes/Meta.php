@@ -11,7 +11,6 @@ use Attribute;
 final readonly class Meta
 {
     /** @param array<string,mixed> $data Values follow the same cache-safe contract as Route::meta(). */
-    public function __construct(public array $data)
-    {
+    public function __construct(public array $data) {
     }
 }

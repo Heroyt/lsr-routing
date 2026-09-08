@@ -17,15 +17,13 @@ final class RouteCacheCommandTest extends TestCase
     private string $directory;
     private string $cacheFile;
 
-    protected function setUp(): void
-    {
+    protected function setUp(): void {
         $this->directory = sys_get_temp_dir() . '/lsr-route-command-' . bin2hex(random_bytes(8));
         mkdir($this->directory, 0775, true);
         $this->cacheFile = $this->directory . '/routes.php';
     }
 
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
         foreach ([$this->cacheFile, $this->cacheFile . '.tmp', $this->cacheFile . '.lock'] as $file) {
@@ -38,8 +36,7 @@ final class RouteCacheCommandTest extends TestCase
         }
     }
 
-    public function testCompileAndCleanCommandsManageThePhpArtifact(): void
-    {
+    public function test_compile_and_clean_commands_manage_the_php_artifact(): void {
         $source = ROOT . 'routes/compiled-routes.php';
         $cache = new CompiledRouteCache(
             $this->cacheFile,

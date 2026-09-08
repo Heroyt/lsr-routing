@@ -18,20 +18,17 @@ final class SitemapController
     #[Route(method: RequestMethod::POST, path: '/attribute/one')]
     #[Sitemap('articles', priority: 0.6, changefreq: SitemapChangeFrequency::WEEKLY)]
     #[Meta(['section' => 'articles'])]
-    public function article(): void
-    {
+    public function article(): void {
     }
 
     #[Route(path: '/attribute/excluded')]
     #[SitemapExclude]
     #[Sitemap('excluded')]
-    public function excluded(): void
-    {
+    public function excluded(): void {
     }
 
     #[Route(method: RequestMethod::POST, path: '/attribute/audit', name: 'attribute.audit')]
     #[Meta(['audit' => 'write'])]
-    public function audit(): void
-    {
+    public function audit(): void {
     }
 }

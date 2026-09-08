@@ -41,15 +41,14 @@ final class CompiledRouteCache
     ) {
     }
 
-    public function load(Router $router): bool
-    {
-        if (!is_file($this->file)) {
+    public function load(Router $router): bool {
+        if ( ! is_file($this->file)) {
             return false;
         }
 
         try {
             $data = require $this->file;
-            if (!is_array($data) || ($data['version'] ?? null) !== self::FORMAT_VERSION) {
+            if ( ! is_array($data) || ($data['version'] ?? null) !== self::FORMAT_VERSION) {
                 return false;
             }
             if ($this->checkTimestamps && ($data['manifest'] ?? null) !== $this->createSourceManifest()) {
@@ -62,21 +61,19 @@ final class CompiledRouteCache
         }
     }
 
-    public function compile(Router $router): void
-    {
+    public function compile(Router $router): void {
         $data = $this->encode($router);
         $contents = "<?php\n\ndeclare(strict_types=1);\n\nreturn " . var_export($data, true) . ";\n";
         $this->writeAtomically($contents);
     }
 
-    public function clear(): void
-    {
-        if (!is_dir(dirname($this->file))) {
+    public function clear(): void {
+        if ( ! is_dir(dirname($this->file))) {
             return;
         }
 
         $lock = fopen($this->file . '.lock', 'c+b');
-        if ($lock === false || !flock($lock, LOCK_EX)) {
+        if ($lock === false || ! flock($lock, LOCK_EX)) {
             if (is_resource($lock)) {
                 fclose($lock);
             }
@@ -85,7 +82,7 @@ final class CompiledRouteCache
 
         try {
             foreach ([$this->file, $this->file . '.tmp'] as $file) {
-                if (is_file($file) && !unlink($file)) {
+                if (is_file($file) && ! unlink($file)) {
                     throw new RouteCacheCompilationException(sprintf('Unable to remove route cache file "%s".', $file));
                 }
             }
@@ -101,8 +98,7 @@ final class CompiledRouteCache
     /**
      * @return array<string,mixed>
      */
-    private function encode(Router $router): array
-    {
+    private function encode(Router $router): array {
         /** @var SplObjectStorage<Route,int> $routeIds */
         $routeIds = new SplObjectStorage();
         /** @var list<Route> $routes */
@@ -110,7 +106,7 @@ final class CompiledRouteCache
 
         $registerRoute = null;
         $registerRoute = function (RouteInterface $route) use (&$registerRoute, $routeIds, &$routes): int {
-            if (!$route instanceof Route) {
+            if ( ! $route instanceof Route) {
                 throw new RouteCacheCompilationException(
                     sprintf('Route cache cannot compile custom route type %s.', $route::class),
                 );
@@ -233,8 +229,7 @@ final class CompiledRouteCache
      * @param callable(RouteInterface):int $routeId
      * @return array<string,mixed>
      */
-    private function encodeNode(mixed $node, callable $routeId): array
-    {
+    private function encodeNode(mixed $node, callable $routeId): array {
         if ($node instanceof RouteInterface) {
             return ['type' => 'route', 'id' => $routeId($node)];
         }
@@ -247,7 +242,7 @@ final class CompiledRouteCache
                 'routes' => $this->encodeNode($node->routes, $routeId),
             ];
         }
-        if (!is_array($node)) {
+        if ( ! is_array($node)) {
             throw new RouteCacheCompilationException(
                 sprintf('Route cache encountered unsupported matcher node %s.', get_debug_type($node)),
             );
@@ -326,7 +321,7 @@ final class CompiledRouteCache
         if ($dependency instanceof ServiceReference) {
             return ['type' => 'service', 'id' => $router->getServiceId($dependency)];
         }
-        if (!$objectIds->offsetExists($dependency)) {
+        if ( ! $objectIds->offsetExists($dependency)) {
             $id = count($objects);
             $objectIds[$dependency] = $id;
             $objects[] = $dependency;
@@ -341,8 +336,7 @@ final class CompiledRouteCache
      * @param list<object>            $objects
      * @param array<int,list<string>> $contexts
      */
-    private function serializeObjectPool(array $objects, array $contexts): string
-    {
+    private function serializeObjectPool(array $objects, array $contexts): string {
         $errors = [];
         foreach ($objects as $id => $object) {
             try {
@@ -372,8 +366,7 @@ final class CompiledRouteCache
         }
     }
 
-    private function serializeValue(mixed $value): string
-    {
+    private function serializeValue(mixed $value): string {
         set_error_handler(
             static function (int $severity, string $message, string $file, int $line): never {
                 throw new ErrorException($message, 0, $severity, $file, $line);
@@ -389,11 +382,10 @@ final class CompiledRouteCache
     /**
      * @param array<string,mixed> $data
      */
-    private function hydrate(Router $router, array $data): void
-    {
+    private function hydrate(Router $router, array $data): void {
         $objects = $this->unserializeObjectPool($data['objects'] ?? null);
         $definitions = $data['routes'] ?? null;
-        if (!is_array($definitions)) {
+        if ( ! is_array($definitions)) {
             throw new UnexpectedValueException('Compiled route definitions are missing.');
         }
 
@@ -403,7 +395,7 @@ final class CompiledRouteCache
         while ($remaining !== []) {
             $progress = false;
             foreach ($remaining as $id => $definition) {
-                if (!is_array($definition)) {
+                if ( ! is_array($definition)) {
                     throw new UnexpectedValueException('A compiled route definition is invalid.');
                 }
                 $type = $definition['type'] ?? null;
@@ -414,7 +406,7 @@ final class CompiledRouteCache
                     $route = Route::create($method, $path, $this->decodeHandler($definition['handler'] ?? null, $objects));
                 } elseif ($type === 'localized') {
                     $parentId = $definition['parent'] ?? null;
-                    if (!is_int($parentId) || !isset($routes[$parentId])) {
+                    if ( ! is_int($parentId) || ! isset($routes[$parentId])) {
                         continue;
                     }
                     $route = LocalizedRoute::createLocalized(
@@ -425,7 +417,7 @@ final class CompiledRouteCache
                     );
                 } elseif ($type === 'alias') {
                     $targetId = $definition['redirectTo'] ?? null;
-                    if (!is_int($targetId) || !isset($routes[$targetId])) {
+                    if ( ! is_int($targetId) || ! isset($routes[$targetId])) {
                         continue;
                     }
                     $route = AliasRoute::createAlias($method, $path, $routes[$targetId]);
@@ -434,16 +426,16 @@ final class CompiledRouteCache
                 }
 
                 $route->setName((string) ($definition['name'] ?? ''));
-                if (!$route instanceof LocalizedRoute) {
+                if ( ! $route instanceof LocalizedRoute) {
                     $metadata = $definition['meta'] ?? null;
-                    if (!is_array($metadata)) {
+                    if ( ! is_array($metadata)) {
                         throw new UnexpectedValueException('Compiled route metadata is missing.');
                     }
                     $route->restoreMeta($metadata);
                 }
-                if (!$route instanceof LocalizedRoute && !$route instanceof AliasRoute) {
+                if ( ! $route instanceof LocalizedRoute && ! $route instanceof AliasRoute) {
                     $sitemap = $definition['sitemap'] ?? null;
-                    if (!is_array($sitemap)) {
+                    if ( ! is_array($sitemap)) {
                         throw new UnexpectedValueException('Compiled sitemap metadata is missing.');
                     }
                     $route->restoreSitemapDefinition($sitemap);
@@ -468,7 +460,7 @@ final class CompiledRouteCache
                 unset($remaining[$id]);
                 $progress = true;
             }
-            if (!$progress) {
+            if ( ! $progress) {
                 throw new UnexpectedValueException('Compiled route relationships contain an unresolved cycle.');
             }
         }
@@ -476,7 +468,7 @@ final class CompiledRouteCache
         foreach ($definitions as $id => $definition) {
             $localized = [];
             foreach (($definition['localized'] ?? []) as $locale => $localizedId) {
-                if (!is_int($localizedId) || !isset($routes[$localizedId])) {
+                if ( ! is_int($localizedId) || ! isset($routes[$localizedId])) {
                     throw new UnexpectedValueException('A compiled localized route reference is invalid.');
                 }
                 $localized[(string) $locale] = $routes[$localizedId];
@@ -488,12 +480,12 @@ final class CompiledRouteCache
         }
 
         $tree = $this->decodeNode($data['tree'] ?? null, $routes);
-        if (!is_array($tree)) {
+        if ( ! is_array($tree)) {
             throw new UnexpectedValueException('The compiled route tree root must be an array.');
         }
         $named = [];
         foreach (($data['named'] ?? []) as $name => $id) {
-            if (!is_int($id) || !isset($routes[$id])) {
+            if ( ! is_int($id) || ! isset($routes[$id])) {
                 throw new UnexpectedValueException('A compiled named route reference is invalid.');
             }
             $named[(string) $name] = $routes[$id];
@@ -507,9 +499,8 @@ final class CompiledRouteCache
      * @param list<object> $objects
      * @return callable|array{0:class-string|object,1:string}
      */
-    private function decodeHandler(mixed $definition, array $objects): callable|array
-    {
-        if (!is_array($definition)) {
+    private function decodeHandler(mixed $definition, array $objects): callable|array {
+        if ( ! is_array($definition)) {
             throw new UnexpectedValueException('A compiled route handler is invalid.');
         }
         return match ($definition['type'] ?? null) {
@@ -527,10 +518,9 @@ final class CompiledRouteCache
     /**
      * @param list<object> $objects
      */
-    private function decodeClosure(mixed $definition, array $objects): callable
-    {
+    private function decodeClosure(mixed $definition, array $objects): callable {
         $closure = $this->decodeObjectDependency($definition, $objects);
-        if (!$closure instanceof SerializableClosure) {
+        if ( ! $closure instanceof SerializableClosure) {
             throw new UnexpectedValueException('A compiled closure handler has an invalid object.');
         }
         return $closure->getClosure();
@@ -540,16 +530,15 @@ final class CompiledRouteCache
      * @param list<object> $objects
      * @param class-string $expectedType
      */
-    private function decodeDependency(mixed $definition, array $objects, Router $router, string $expectedType): object
-    {
-        if (!is_array($definition)) {
+    private function decodeDependency(mixed $definition, array $objects, Router $router, string $expectedType): object {
+        if ( ! is_array($definition)) {
             throw new UnexpectedValueException('A compiled route dependency is invalid.');
         }
         if (($definition['type'] ?? null) === 'service') {
             return $router->resolveServiceId((string) ($definition['id'] ?? ''), $expectedType);
         }
         $object = $this->decodeObjectDependency($definition, $objects);
-        if (!$object instanceof $expectedType) {
+        if ( ! $object instanceof $expectedType) {
             throw new UnexpectedValueException(
                 sprintf('A compiled route dependency must implement %s; got %s.', $expectedType, $object::class),
             );
@@ -560,13 +549,12 @@ final class CompiledRouteCache
     /**
      * @param list<object> $objects
      */
-    private function decodeObjectDependency(mixed $definition, array $objects): object
-    {
-        if (!is_array($definition) || ($definition['type'] ?? null) !== 'object') {
+    private function decodeObjectDependency(mixed $definition, array $objects): object {
+        if ( ! is_array($definition) || ($definition['type'] ?? null) !== 'object') {
             throw new UnexpectedValueException('A compiled object dependency is invalid.');
         }
         $id = $definition['id'] ?? null;
-        if (!is_int($id) || !isset($objects[$id])) {
+        if ( ! is_int($id) || ! isset($objects[$id])) {
             throw new UnexpectedValueException('A compiled object dependency ID is invalid.');
         }
         return $objects[$id];
@@ -575,9 +563,8 @@ final class CompiledRouteCache
     /**
      * @param array<int,Route> $routes
      */
-    private function decodeNode(mixed $definition, array $routes): mixed
-    {
-        if (!is_array($definition)) {
+    private function decodeNode(mixed $definition, array $routes): mixed {
+        if ( ! is_array($definition)) {
             throw new UnexpectedValueException('A compiled matcher node is invalid.');
         }
         return match ($definition['type'] ?? null) {
@@ -594,29 +581,26 @@ final class CompiledRouteCache
     }
 
     /** @param array<int,Route> $routes */
-    private function decodeRouteNode(array $definition, array $routes): Route
-    {
+    private function decodeRouteNode(array $definition, array $routes): Route {
         $id = $definition['id'] ?? null;
-        if (!is_int($id) || !isset($routes[$id])) {
+        if ( ! is_int($id) || ! isset($routes[$id])) {
             throw new UnexpectedValueException('A compiled matcher route ID is invalid.');
         }
         return $routes[$id];
     }
 
     /** @param array<int,Route> $routes */
-    private function decodeArrayNode(mixed $definition, array $routes): array
-    {
+    private function decodeArrayNode(mixed $definition, array $routes): array {
         $node = $this->decodeNode($definition, $routes);
-        if (!is_array($node)) {
+        if ( ! is_array($node)) {
             throw new UnexpectedValueException('A compiled parameter child node must be an array.');
         }
         return $node;
     }
 
     /** @param array<int,Route> $routes */
-    private function decodeArrayChildren(mixed $children, array $routes): array
-    {
-        if (!is_array($children)) {
+    private function decodeArrayChildren(mixed $children, array $routes): array {
+        if ( ! is_array($children)) {
             throw new UnexpectedValueException('Compiled matcher children must be an array.');
         }
         $decoded = [];
@@ -629,9 +613,8 @@ final class CompiledRouteCache
     /**
      * @return list<object>
      */
-    private function unserializeObjectPool(mixed $payload): array
-    {
-        if (!is_string($payload)) {
+    private function unserializeObjectPool(mixed $payload): array {
+        if ( ! is_string($payload)) {
             throw new UnexpectedValueException('The compiled route object pool is missing.');
         }
         set_error_handler(
@@ -644,11 +627,11 @@ final class CompiledRouteCache
         } finally {
             restore_error_handler();
         }
-        if (!is_array($objects) || !array_is_list($objects)) {
+        if ( ! is_array($objects) || ! array_is_list($objects)) {
             throw new UnexpectedValueException('The compiled route object pool is invalid.');
         }
         foreach ($objects as $object) {
-            if (!is_object($object)) {
+            if ( ! is_object($object)) {
                 throw new UnexpectedValueException('The compiled route object pool contains a non-object value.');
             }
         }
@@ -658,8 +641,7 @@ final class CompiledRouteCache
     /**
      * @return array<string,int|null>
      */
-    private function createSourceManifest(): array
-    {
+    private function createSourceManifest(): array {
         $files = [];
         foreach ($this->routeSources as $source) {
             if (is_dir($source)) {
@@ -670,7 +652,7 @@ final class CompiledRouteCache
             }
         }
         foreach ($this->controllerSources as $source) {
-            if (!is_dir($source)) {
+            if ( ! is_dir($source)) {
                 $files[] = $source;
                 continue;
             }
@@ -691,16 +673,15 @@ final class CompiledRouteCache
         return $manifest;
     }
 
-    private function writeAtomically(string $contents): void
-    {
+    private function writeAtomically(string $contents): void {
         $directory = dirname($this->file);
-        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+        if ( ! is_dir($directory) && ! mkdir($directory, 0775, true) && ! is_dir($directory)) {
             throw new RouteCacheCompilationException(sprintf('Unable to create route cache directory "%s".', $directory));
         }
 
         $lockFile = $this->file . '.lock';
         $lock = fopen($lockFile, 'c+b');
-        if ($lock === false || !flock($lock, LOCK_EX)) {
+        if ($lock === false || ! flock($lock, LOCK_EX)) {
             if (is_resource($lock)) {
                 fclose($lock);
             }
@@ -717,13 +698,13 @@ final class CompiledRouteCache
                 @opcache_invalidate($temporaryFile, true);
             }
             $probe = require $temporaryFile;
-            if (!is_array($probe) || ($probe['version'] ?? null) !== self::FORMAT_VERSION) {
+            if ( ! is_array($probe) || ($probe['version'] ?? null) !== self::FORMAT_VERSION) {
                 throw new RouteCacheCompilationException('Generated route cache failed its format validation.');
             }
             if (function_exists('opcache_invalidate')) {
                 @opcache_invalidate($this->file, true);
             }
-            if (!rename($temporaryFile, $this->file)) {
+            if ( ! rename($temporaryFile, $this->file)) {
                 throw new RouteCacheCompilationException(sprintf('Unable to publish route cache "%s".', $this->file));
             }
             if (function_exists('opcache_invalidate')) {

@@ -11,8 +11,7 @@ final class MiddlewareGroupNotFoundException extends RuntimeException
     /**
      * @param array<non-empty-string, list<non-empty-string>> $references
      */
-    public function __construct(public readonly array $references)
-    {
+    public function __construct(public readonly array $references) {
         $details = [];
         foreach ($references as $group => $contexts) {
             $details[] = sprintf('%s (%s)', $group, implode(', ', $contexts));

@@ -14,14 +14,14 @@ use Lsr\Core\Routing\Tests\Mockup\NamedMiddleware;
 use Lsr\Core\Routing\Tests\Mockup\NamedValidator;
 use Lsr\Enums\RequestMethod;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class CompiledRouteCacheTest extends TestCase
 {
     /** @var list<string> */
     private array $temporaryPaths = [];
 
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
         unset($GLOBALS['compiled-route-loads']);
@@ -34,8 +34,7 @@ final class CompiledRouteCacheTest extends TestCase
         }
     }
 
-    public function testCompiledCacheHydratesTheFinalMatcherWithoutReloadingSources(): void
-    {
+    public function test_compiled_cache_hydrates_the_final_matcher_without_reloading_sources(): void {
         $source = ROOT . 'routes/compiled-routes.php';
         $cacheFile = $this->temporaryFile('routes.php');
         $cache = new CompiledRouteCache($cacheFile, routeSources: [$source]);
@@ -71,8 +70,7 @@ final class CompiledRouteCacheTest extends TestCase
         self::assertNotNull(Router::getRoute(RequestMethod::GET, ['compiled-legacy', '42'], $legacyParams));
     }
 
-    public function testCompiledCacheHydratesServiceReferencesThroughDi(): void
-    {
+    public function test_compiled_cache_hydrates_service_references_through_di(): void {
         $typed = new NamedMiddleware('typed');
         $audit = new NamedMiddleware('audit');
         $validator = new NamedValidator('accept');
@@ -91,8 +89,7 @@ final class CompiledRouteCacheTest extends TestCase
         self::assertSame([$validator], $route->paramValidators['id']);
     }
 
-    public function testTimestampCheckingDetectsNewRouteFiles(): void
-    {
+    public function test_timestamp_checking_detects_new_route_files(): void {
         $directory = $this->temporaryDirectory();
         $cacheFile = $directory . '/routes.php.cache';
         $this->temporaryPaths[] = $cacheFile . '.lock';
@@ -117,8 +114,7 @@ final class CompiledRouteCacheTest extends TestCase
         self::assertNotNull($router->getRouteByName('second-cache-route'));
     }
 
-    public function testAutomaticCompilationFallsBackForUnserializableMiddleware(): void
-    {
+    public function test_automatic_compilation_falls_back_for_unserializable_middleware(): void {
         $source = ROOT . 'routes/unserializable-routes.php';
         $cacheFile = $this->temporaryFile('unserializable.php');
         $router = new Router(
@@ -135,8 +131,7 @@ final class CompiledRouteCacheTest extends TestCase
         $router->compileCache();
     }
 
-    private function temporaryFile(string $name): string
-    {
+    private function temporaryFile(string $name): string {
         $directory = $this->temporaryDirectory();
         $file = $directory . '/' . $name;
         $this->temporaryPaths[] = $file . '.lock';
@@ -144,16 +139,14 @@ final class CompiledRouteCacheTest extends TestCase
         return $file;
     }
 
-    private function temporaryDirectory(): string
-    {
+    private function temporaryDirectory(): string {
         $directory = sys_get_temp_dir() . '/lsr-routing-' . bin2hex(random_bytes(8));
         mkdir($directory, 0775, true);
         $this->temporaryPaths[] = $directory;
         return $directory;
     }
 
-    private function routeSource(string $name, string $path): string
-    {
+    private function routeSource(string $name, string $path): string {
         return sprintf(
             "<?php\n\n\$this->get('%s', [\\Lsr\\Core\\Routing\\Tests\\Mockup\\Controllers\\DummyController::class, 'action'])->name('%s');\n",
             $path,
@@ -166,7 +159,7 @@ final class CompiledRouteCacheTest extends TestCase
         NamedMiddleware $audit,
         NamedValidator $validator,
     ): ServiceResolverInterface {
-        return new class($typed, $audit, $validator) implements ServiceResolverInterface {
+        return new class ($typed, $audit, $validator) implements ServiceResolverInterface {
             public function __construct(
                 private readonly NamedMiddleware $typed,
                 private readonly NamedMiddleware $audit,
@@ -174,18 +167,16 @@ final class CompiledRouteCacheTest extends TestCase
             ) {
             }
 
-            public function getServiceId(ServiceReference $reference): string
-            {
+            public function getServiceId(ServiceReference $reference): string {
                 return $reference->isTypeReference() ? 'middleware.typed' : $reference->service;
             }
 
-            public function getService(string $serviceId): object
-            {
+            public function getService(string $serviceId): object {
                 return match ($serviceId) {
                     'middleware.typed' => $this->typed,
                     'middleware.audit' => $this->audit,
                     'validator.accept' => $this->validator,
-                    default => throw new \RuntimeException('Unknown test service ' . $serviceId),
+                    default => throw new RuntimeException('Unknown test service ' . $serviceId),
                 };
             }
         };

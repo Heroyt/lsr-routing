@@ -13,17 +13,16 @@ use Lsr\Core\Routing\ServiceReference;
 use Lsr\Core\Routing\Tests\Mockup\NamedMiddleware;
 use Lsr\Core\Routing\Tests\Mockup\NamedValidator;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class MiddlewareGroupTest extends TestCase
 {
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
     }
 
-    public function testGroupsResolveAfterAllRouteFilesAndPreserveOrder(): void
-    {
+    public function test_groups_resolve_after_all_route_files_and_preserve_order(): void {
         $router = new Router([ROOT . 'routes/middleware-groups.php']);
         $router->setup();
 
@@ -31,29 +30,27 @@ final class MiddlewareGroupTest extends TestCase
         self::assertNotNull($route);
         self::assertSame(
             ['before', 'shared', 'second', 'after'],
-            array_map(static fn(NamedMiddleware $middleware): string => $middleware->name, $route->getMiddleware()),
+            array_map(static fn (NamedMiddleware $middleware): string => $middleware->name, $route->getMiddleware()),
         );
 
         $grouped = $router->getRouteByName('middleware-grouped');
         self::assertNotNull($grouped);
         self::assertSame(
             ['shared', 'second'],
-            array_map(static fn(NamedMiddleware $middleware): string => $middleware->name, $grouped->getMiddleware()),
+            array_map(static fn (NamedMiddleware $middleware): string => $middleware->name, $grouped->getMiddleware()),
         );
     }
 
-    public function testRouteDeduplicatesTheSameMiddlewareInstance(): void
-    {
+    public function test_route_deduplicates_the_same_middleware_instance(): void {
         $router = new Router();
         $middleware = new NamedMiddleware('same');
-        $route = $router->get('/deduplicated', static fn() => null)
+        $route = $router->get('/deduplicated', static fn () => null)
             ->middleware($middleware, $middleware);
 
         self::assertSame([$middleware], $route->getMiddleware());
     }
 
-    public function testUnknownGroupsAreReportedTogether(): void
-    {
+    public function test_unknown_groups_are_reported_together(): void {
         $router = new Router([ROOT . 'routes/middleware-missing.php']);
 
         try {
@@ -66,27 +63,24 @@ final class MiddlewareGroupTest extends TestCase
         }
     }
 
-    public function testEmptyGroupNameIsRejected(): void
-    {
+    public function test_empty_group_name_is_rejected(): void {
         $this->expectException(InvalidArgumentException::class);
         (new Router())->middlewareGroup('   ');
     }
 
-    public function testGroupReferencesAndDefinitionsAreRejectedAfterResolution(): void
-    {
+    public function test_group_references_and_definitions_are_rejected_after_resolution(): void {
         $router = new Router([ROOT . 'routes/middleware-groups.php']);
         $router->setup();
 
         $this->expectException(MiddlewareGroupsResolvedException::class);
-        $router->get('/late', static fn() => null)->middleware('web');
+        $router->get('/late', static fn () => null)->middleware('web');
     }
 
-    public function testClassicMiddlewareMethodsAcceptServiceReferences(): void
-    {
+    public function test_classic_middleware_methods_accept_service_references(): void {
         $typed = new NamedMiddleware('typed');
         $audit = new NamedMiddleware('audit');
         $validator = new NamedValidator('accept');
-        $resolver = new class($typed, $audit, $validator) implements ServiceResolverInterface {
+        $resolver = new class ($typed, $audit, $validator) implements ServiceResolverInterface {
             public function __construct(
                 private readonly NamedMiddleware $typed,
                 private readonly NamedMiddleware $audit,
@@ -94,18 +88,16 @@ final class MiddlewareGroupTest extends TestCase
             ) {
             }
 
-            public function getServiceId(ServiceReference $reference): string
-            {
+            public function getServiceId(ServiceReference $reference): string {
                 return $reference->isTypeReference() ? 'middleware.typed' : $reference->service;
             }
 
-            public function getService(string $serviceId): object
-            {
+            public function getService(string $serviceId): object {
                 return match ($serviceId) {
                     'middleware.typed' => $this->typed,
                     'middleware.audit' => $this->audit,
                     'validator.accept' => $this->validator,
-                    default => throw new \RuntimeException('Unknown test service ' . $serviceId),
+                    default => throw new RuntimeException('Unknown test service ' . $serviceId),
                 };
             }
         };

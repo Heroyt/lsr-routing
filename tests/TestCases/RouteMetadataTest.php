@@ -12,20 +12,17 @@ use PHPUnit\Framework\TestCase;
 
 final class RouteMetadataTest extends TestCase
 {
-    protected function setUp(): void
-    {
+    protected function setUp(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
     }
 
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
     }
 
-    public function testNonGetRoutesExposeLiveGroupMetadataWithoutSitemapDeclarations(): void
-    {
+    public function test_non_get_routes_expose_live_group_metadata_without_sitemap_declarations(): void {
         $router = new Router();
         $group = $router->group('/api')->meta(['policy' => 'initial', 'nested' => ['parent' => true]]);
         $nested = $group->group('/jobs')->meta(['section' => 'jobs']);
@@ -49,8 +46,7 @@ final class RouteMetadataTest extends TestCase
         self::assertSame([], $router->getSitemapNames());
     }
 
-    public function testApplicationKeysCannotOverrideSitemapSettingsAndExclusionKeepsMetadata(): void
-    {
+    public function test_application_keys_cannot_override_sitemap_settings_and_exclusion_keeps_metadata(): void {
         $router = new Router();
         $route = $router->get('/page', [DummyController::class, 'action'])
             ->sitemap('public')->priority(0.7)->changefreq('weekly');
@@ -64,8 +60,7 @@ final class RouteMetadataTest extends TestCase
         self::assertSame([], $router->getSitemapNames());
     }
 
-    public function testMetadataAttributeWorksWithoutSitemapAttributeOnPostRoutes(): void
-    {
+    public function test_metadata_attribute_works_without_sitemap_attribute_on_post_routes(): void {
         $router = new Router(controllers: [ROOT . 'src/SitemapController.php']);
         $router->setup();
         $route = $router->getRouteByName('attribute.audit');

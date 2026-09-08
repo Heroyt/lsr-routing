@@ -18,13 +18,11 @@ use Throwable;
 )]
 final class RouteCacheCleanCommand extends Command
 {
-    public function __construct(private readonly CompiledRouteCache $cache)
-    {
+    public function __construct(private readonly CompiledRouteCache $cache) {
         parent::__construct();
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output): int
-    {
+    protected function execute(InputInterface $input, OutputInterface $output): int {
         try {
             $this->cache->clear();
         } catch (Throwable $exception) {

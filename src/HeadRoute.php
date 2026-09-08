@@ -12,13 +12,12 @@ use Psr\Http\Message\ResponseInterface;
 class HeadRoute extends Route
 {
     public function __construct(
-        protected(set) RouteInterface $fallbackFor,
+        public protected(set) RouteInterface $fallbackFor,
     ) {
         parent::__construct(RequestMethod::HEAD, [$this, 'respond']);
     }
 
-    public static function createFallback(RouteInterface $fallbackFor): HeadRoute
-    {
+    public static function createFallback(RouteInterface $fallbackFor): HeadRoute {
         $route = new self($fallbackFor);
         $route->path = $fallbackFor->getPath();
         $route->readablePath = $fallbackFor->getReadable();
@@ -31,8 +30,7 @@ class HeadRoute extends Route
         return $route;
     }
 
-    public function respond(): ResponseInterface
-    {
+    public function respond(): ResponseInterface {
         return Response::create();
     }
 }

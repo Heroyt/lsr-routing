@@ -18,15 +18,13 @@ final class SitemapCacheTest extends TestCase
     /** @var list<string> */
     private array $temporaryPaths = [];
 
-    protected function setUp(): void
-    {
+    protected function setUp(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
         unset($GLOBALS['sitemap-route-loads']);
     }
 
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
         unset($GLOBALS['sitemap-route-loads']);
@@ -40,8 +38,7 @@ final class SitemapCacheTest extends TestCase
     }
 
     #[DataProvider('inclusionPolicies')]
-    public function testWarmCachePreservesDiscoveryInheritanceAndLocalizedEntries(bool $defaultIncluded): void
-    {
+    public function test_warm_cache_preserves_discovery_inheritance_and_localized_entries(bool $defaultIncluded): void {
         $source = ROOT . 'routes/sitemap-routes.php';
         $cache = new CompiledRouteCache($this->temporaryCacheFile(), routeSources: [$source]);
         $cold = new Router([$source], compiledRouteCache: $cache, sitemapDefaultIncluded: $defaultIncluded);
@@ -50,11 +47,11 @@ final class SitemapCacheTest extends TestCase
         self::assertEqualsCanonicalizing([null, 'news'], $cold->getSitemapNames());
         self::assertSame(
             ['/sitemap/news/nested/{id}'],
-            array_map(static fn(Route $route): string => $route->getReadable(), $cold->getSitemapRoutes('news')),
+            array_map(static fn (Route $route): string => $route->getReadable(), $cold->getSitemapRoutes('news')),
         );
         self::assertEqualsCanonicalizing(
             ['/sitemap/news/nested/{id}', '/en/sitemap/news/{id}', '/choose/sitemap/news/{id}'],
-            array_map(static fn(SitemapEntry $entry): string => $entry->route->getReadable(), $cold->getSitemapEntries('news')),
+            array_map(static fn (SitemapEntry $entry): string => $entry->route->getReadable(), $cold->getSitemapEntries('news')),
         );
         $root = $cold->getRouteByName('sitemap-localized');
         self::assertInstanceOf(Route::class, $root);
@@ -72,30 +69,28 @@ final class SitemapCacheTest extends TestCase
     }
 
     #[DataProvider('inclusionPolicies')]
-    public function testCacheReuseResolvesUndeclaredInclusionAgainstTheNewRouterPolicy(bool $coldDefault): void
-    {
+    public function test_cache_reuse_resolves_undeclared_inclusion_against_the_new_router_policy(bool $coldDefault): void {
         $source = ROOT . 'routes/sitemap-routes.php';
         $cache = new CompiledRouteCache($this->temporaryCacheFile(), routeSources: [$source]);
         $cold = new Router([$source], compiledRouteCache: $cache, sitemapDefaultIncluded: $coldDefault);
         $cold->setup();
-        $warm = new Router([$source], compiledRouteCache: $cache, sitemapDefaultIncluded: !$coldDefault);
+        $warm = new Router([$source], compiledRouteCache: $cache, sitemapDefaultIncluded: ! $coldDefault);
         $warm->setup();
 
         self::assertSame(1, $GLOBALS['sitemap-route-loads'], 'Changing inclusion policy must reuse the compiled declarations.');
         self::assertEqualsCanonicalizing(
             $coldDefault ? ['/sitemap/default'] : ['/sitemap/default', '/sitemap/implicit'],
-            array_map(static fn(Route $route): string => $route->getReadable(), $warm->getSitemapRoutes()),
+            array_map(static fn (Route $route): string => $route->getReadable(), $warm->getSitemapRoutes()),
         );
         self::assertSame([], $warm->getSitemapRoutes('private'));
         self::assertEqualsCanonicalizing([null, 'news'], $warm->getSitemapNames());
         $expected = $this->snapshot($warm);
-        $uncached = new Router([$source], sitemapDefaultIncluded: !$coldDefault);
+        $uncached = new Router([$source], sitemapDefaultIncluded: ! $coldDefault);
         $uncached->setup();
         self::assertEquals($this->snapshot($uncached), $expected);
     }
 
-    public function testHydratedLocalizedFamilyFollowsLaterRootDeclarations(): void
-    {
+    public function test_hydrated_localized_family_follows_later_root_declarations(): void {
         $source = ROOT . 'routes/sitemap-routes.php';
         $cache = new CompiledRouteCache($this->temporaryCacheFile(), routeSources: [$source]);
         (new Router([$source], compiledRouteCache: $cache))->setup();
@@ -108,7 +103,7 @@ final class SitemapCacheTest extends TestCase
         self::assertSame([], $router->getSitemapEntries('news'));
         self::assertEqualsCanonicalizing(
             ['/sitemap/news/nested/{id}', '/en/sitemap/news/{id}', '/choose/sitemap/news/{id}'],
-            array_map(static fn(SitemapEntry $entry): string => $entry->route->getReadable(), $router->getSitemapEntries('archive')),
+            array_map(static fn (SitemapEntry $entry): string => $entry->route->getReadable(), $router->getSitemapEntries('archive')),
         );
         foreach ($router->getSitemapEntries('archive') as $entry) {
             self::assertEquals($root->getSitemapMetadata(), $entry->metadata);
@@ -120,8 +115,7 @@ final class SitemapCacheTest extends TestCase
         self::assertSame([], $router->getSitemapEntries('archive'));
     }
 
-    public function testCachePreservesMetadataOnNonSitemapRoutesAndLocalizedPaths(): void
-    {
+    public function test_cache_preserves_metadata_on_non_sitemap_routes_and_localized_paths(): void {
         $source = ROOT . 'routes/sitemap-routes.php';
         $cache = new CompiledRouteCache($this->temporaryCacheFile(), routeSources: [$source]);
         (new Router([$source], compiledRouteCache: $cache))->setup();
@@ -145,8 +139,7 @@ final class SitemapCacheTest extends TestCase
         self::assertSame(['policy' => 'internal', 'audit' => true], $post->getMeta());
     }
 
-    public static function inclusionPolicies(): iterable
-    {
+    public static function inclusionPolicies(): iterable {
         yield 'opt in' => [false];
         yield 'opt out' => [true];
     }
@@ -160,17 +153,16 @@ final class SitemapCacheTest extends TestCase
      *     }>
      * }>
      */
-    private function snapshot(Router $router): array
-    {
+    private function snapshot(Router $router): array {
         $names = $router->getSitemapNames();
         sort($names);
         $snapshot = [];
         foreach ($names as $name) {
-            $routes = array_map(static fn(Route $route): string => $route->getReadable(), $router->getSitemapRoutes($name));
+            $routes = array_map(static fn (Route $route): string => $route->getReadable(), $router->getSitemapRoutes($name));
             sort($routes);
             $entries = [];
             foreach ($router->getSitemapEntries($name) as $entry) {
-                $alternates = array_map(static fn(Route $route): string => $route->getReadable(), $entry->alternates);
+                $alternates = array_map(static fn (Route $route): string => $route->getReadable(), $entry->alternates);
                 ksort($alternates);
                 $entries[$entry->route->getReadable()] = [
                     'metadata' => $entry->metadata,
@@ -184,8 +176,7 @@ final class SitemapCacheTest extends TestCase
         return $snapshot;
     }
 
-    private function temporaryCacheFile(): string
-    {
+    private function temporaryCacheFile(): string {
         $directory = sys_get_temp_dir() . '/lsr-sitemap-' . bin2hex(random_bytes(8));
         mkdir($directory, 0775, true);
         $file = $directory . '/routes.php';

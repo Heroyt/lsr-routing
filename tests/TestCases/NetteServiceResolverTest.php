@@ -14,16 +14,14 @@ use PHPUnit\Framework\TestCase;
 final class WiredTestContainer extends Container
 {
     /** @param list<string> $services */
-    public function wire(string $type, array $services): void
-    {
+    public function wire(string $type, array $services): void {
         $this->wiring[$type] = [$services];
     }
 }
 
 final class NetteServiceResolverTest extends TestCase
 {
-    public function testClassReferenceResolvesExactlyOneService(): void
-    {
+    public function test_class_reference_resolves_exactly_one_service(): void {
         $middleware = new NamedMiddleware('typed');
         $container = $this->createContainer(['middleware.typed' => $middleware]);
         $container->wire(NamedMiddleware::class, ['middleware.typed']);
@@ -34,8 +32,7 @@ final class NetteServiceResolverTest extends TestCase
         self::assertSame($middleware, $resolver->getService($id));
     }
 
-    public function testAmbiguousClassReferenceFailsDuringCompilationLookup(): void
-    {
+    public function test_ambiguous_class_reference_fails_during_compilation_lookup(): void {
         $container = $this->createContainer([
             'middleware.first' => new NamedMiddleware('first'),
             'middleware.second' => new NamedMiddleware('second'),
@@ -48,8 +45,7 @@ final class NetteServiceResolverTest extends TestCase
         $resolver->getServiceId(new ServiceReference(NamedMiddleware::class));
     }
 
-    public function testNamedReferenceUsesTheExactServiceId(): void
-    {
+    public function test_named_reference_uses_the_exact_service_id(): void {
         $middleware = new NamedMiddleware('named');
         $container = $this->createContainer(['middleware.named' => $middleware]);
         $resolver = new NetteServiceResolver($container);
@@ -62,8 +58,7 @@ final class NetteServiceResolverTest extends TestCase
     /**
      * @param array<string,object> $services
      */
-    private function createContainer(array $services): WiredTestContainer
-    {
+    private function createContainer(array $services): WiredTestContainer {
         $container = new WiredTestContainer();
         foreach ($services as $name => $service) {
             $container->addService($name, $service);

@@ -12,14 +12,12 @@ use Throwable;
 
 final readonly class NetteServiceResolver implements ServiceResolverInterface
 {
-    public function __construct(private Container $container)
-    {
+    public function __construct(private Container $container) {
     }
 
-    public function getServiceId(ServiceReference $reference): string
-    {
-        if (!$reference->isTypeReference()) {
-            if (!$this->container->hasService($reference->service)) {
+    public function getServiceId(ServiceReference $reference): string {
+        if ( ! $reference->isTypeReference()) {
+            if ( ! $this->container->hasService($reference->service)) {
                 throw new ServiceReferenceException(
                     sprintf('Route service "%s" is not registered in the DI container.', $reference->service),
                 );
@@ -43,8 +41,7 @@ final readonly class NetteServiceResolver implements ServiceResolverInterface
         return reset($services);
     }
 
-    public function getService(string $serviceId): object
-    {
+    public function getService(string $serviceId): object {
         try {
             return $this->container->getService($serviceId);
         } catch (Throwable $exception) {

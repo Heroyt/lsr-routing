@@ -1,43 +1,45 @@
 <?php
+
+declare(strict_types=1);
 /** @noinspection AutoloadingIssuesInspection */
 
 /** @noinspection PhpIllegalPsrClassPathInspection */
 
 
-const ROOT = __DIR__.'/';
-const PRIVATE_DIR = ROOT.'private/';
-const TMP_DIR = ROOT.'tmp/';
-const LOG_DIR = ROOT.'logs/';
-const LANGUAGE_DIR = ROOT.'languages/';
-const TEMPLATE_DIR = ROOT.'templates/';
+const ROOT = __DIR__ . '/';
+const PRIVATE_DIR = ROOT . 'private/';
+const TMP_DIR = ROOT . 'tmp/';
+const LOG_DIR = ROOT . 'logs/';
+const LANGUAGE_DIR = ROOT . 'languages/';
+const TEMPLATE_DIR = ROOT . 'templates/';
 const LANGUAGE_FILE_NAME = 'translations';
 const DEFAULT_LANGUAGE = 'cs_CZ';
 const CHECK_TRANSLATIONS = true;
 const PRODUCTION = true;
-const ASSETS_DIR = ROOT.'assets/';
+const ASSETS_DIR = ROOT . 'assets/';
 
 // Remove cache
-if (file_exists(TMP_DIR.'db.db')) {
-	unlink(TMP_DIR.'db.db');
+if (file_exists(TMP_DIR . 'db.db')) {
+    unlink(TMP_DIR . 'db.db');
 }
-if (file_exists(TMP_DIR.'cache.db')) {
-	unlink(TMP_DIR.'cache.db');
+if (file_exists(TMP_DIR . 'cache.db')) {
+    unlink(TMP_DIR . 'cache.db');
 }
-if (file_exists(ROOT.'routes/test.php')) {
-	unlink(ROOT.'routes/test.php');
+if (file_exists(ROOT . 'routes/test.php')) {
+    unlink(ROOT . 'routes/test.php');
 }
-if (file_exists(ROOT.'src/Controllers/DummyController2.php')) {
-	unlink(ROOT.'src/Controllers/DummyController2.php');
+if (file_exists(ROOT . 'src/Controllers/DummyController2.php')) {
+    unlink(ROOT . 'src/Controllers/DummyController2.php');
 }
-foreach (array_merge(glob(TMP_DIR.'*.php'), glob(TMP_DIR.'di/*')) as $file) {
-	unlink($file);
+foreach (array_merge(glob(TMP_DIR . '*.php'), glob(TMP_DIR . 'di/*')) as $file) {
+    unlink($file);
 }
 
-require_once ROOT.'../vendor/autoload.php';
+require_once ROOT . '../vendor/autoload.php';
 
 file_put_contents(
-	ROOT . 'routes/test.php',
-	<<<PHP
+    ROOT . 'routes/test.php',
+    <<<PHP
 <?php
 use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 
@@ -99,10 +101,10 @@ use Lsr\Core\Routing\Tests\Mockup\Controllers\DummyController;
 	  ->get('{id}', [DummyController::class, 'action'])->param('id', \$numericValidator) // Only numeric IDs
 	  ->get('{slug}', [DummyController::class, 'action']); // Fallback route without validation
 	  
-PHP
+PHP,
 );
 
-file_put_contents(ROOT.'src/Controllers/DummyController2.php', '.json_encode($request->request, JSON_THROW_ON_ERROR);
+file_put_contents(ROOT . 'src/Controllers/DummyController2.php', '.json_encode($request->request, JSON_THROW_ON_ERROR);
 	}
 
 }\'');

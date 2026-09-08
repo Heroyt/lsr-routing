@@ -20,8 +20,7 @@ final readonly class Sitemap
     }
 
     /** @internal Shares validation and semantics with fluent declarations. */
-    public function apply(Route $route): void
-    {
+    public function apply(Route $route): void {
         $route->sitemap($this->name);
         if ($this->priority !== null) {
             $route->priority($this->priority);

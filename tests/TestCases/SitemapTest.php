@@ -17,21 +17,18 @@ use stdClass;
 
 final class SitemapTest extends TestCase
 {
-    protected function setUp(): void
-    {
+    protected function setUp(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
     }
 
-    protected function tearDown(): void
-    {
+    protected function tearDown(): void {
         Router::$availableRoutes = [];
         Router::$namedRoutes = [];
     }
 
     #[DataProvider('inclusionPolicies')]
-    public function testDiscoveryIncludesOnlyEligibleLogicalGetRoots(bool $defaultIncluded): void
-    {
+    public function test_discovery_includes_only_eligible_logical_get_roots(bool $defaultIncluded): void {
         $router = new Router(sitemapDefaultIncluded: $defaultIncluded);
         $implicit = $router->get('/implicit', [DummyController::class, 'action'])
             ->priority(0.5)->changefreq('daily')->meta(['audience' => 'public']);
@@ -47,18 +44,16 @@ final class SitemapTest extends TestCase
         );
         self::assertEqualsCanonicalizing(
             $defaultIncluded ? ['/implicit', '/explicit', '/en/explicit'] : ['/explicit', '/en/explicit'],
-            array_map(static fn(SitemapEntry $entry): string => $entry->route->getReadable(), $router->getSitemapEntries()),
+            array_map(static fn (SitemapEntry $entry): string => $entry->route->getReadable(), $router->getSitemapEntries()),
         );
     }
 
-    public static function inclusionPolicies(): iterable
-    {
+    public static function inclusionPolicies(): iterable {
         yield 'opt in' => [false];
         yield 'opt out' => [true];
     }
 
-    public function testNestedOverridesStayLiveWhenAncestorsChangeAfterRouteCreation(): void
-    {
+    public function test_nested_overrides_stay_live_when_ancestors_change_after_route_creation(): void {
         $router = new Router();
         $outer = $router->group('/outer')->sitemapAll('public')->priorityAll(0.2)
             ->changefreqAll('weekly')->metaAll(['outer' => true, 'nested' => ['parent' => true]]);
@@ -96,8 +91,7 @@ final class SitemapTest extends TestCase
         self::assertSame(0.9, $explicit->getSitemapMetadata()->priority);
     }
 
-    public function testGroupFluentDeclarationsTargetActiveRouteButAllUpdatesDefaults(): void
-    {
+    public function test_group_fluent_declarations_target_active_route_but_all_updates_defaults(): void {
         $router = new Router();
         $group = $router->group('/group')->sitemap('catalog')->priority(0.2)
             ->changefreq('weekly')->meta(['shared' => 'initial']);
@@ -125,8 +119,7 @@ final class SitemapTest extends TestCase
         self::assertContains($first, $router->getSitemapRoutes('updated'));
     }
 
-    public function testNamedDiscoveryListsOnlyOccupiedNamesAndNullSelectsDefault(): void
-    {
+    public function test_named_discovery_lists_only_occupied_names_and_null_selects_default(): void {
         $router = new Router();
         $default = $router->get('/default', [DummyController::class, 'action'])->sitemap();
         $named = $router->get('/named', [DummyController::class, 'action'])->sitemap('news')->sitemap();
@@ -143,8 +136,7 @@ final class SitemapTest extends TestCase
         self::assertSame([$named], $router->getSitemapRoutes('renamed'));
     }
 
-    public function testLocalizedEntriesShareNormalizedAlternatesAndFollowParentMutations(): void
-    {
+    public function test_localized_entries_share_normalized_alternates_and_follow_parent_mutations(): void {
         $router = new Router();
         $root = $router->get('/page/{id}', [DummyController::class, 'action'])->sitemap()
             ->localize('cs_CZ')->localize('en_US', '/en/page/{id}')
@@ -158,7 +150,7 @@ final class SitemapTest extends TestCase
         $entries = $router->getSitemapEntries();
         self::assertEqualsCanonicalizing(
             ['/page/{id}', '/en/page/{id}', '/choose/page/{id}'],
-            array_map(static fn(SitemapEntry $entry): string => $entry->route->getReadable(), $entries),
+            array_map(static fn (SitemapEntry $entry): string => $entry->route->getReadable(), $entries),
         );
         foreach ($entries as $entry) {
             self::assertEqualsCanonicalizing(array_keys($alternates), array_keys($entry->alternates));
@@ -174,23 +166,21 @@ final class SitemapTest extends TestCase
         self::assertSame([], $router->getSitemapEntries());
     }
 
-    public function testUnlocalizedParentIsAnEntryWithoutInventingAnAlternate(): void
-    {
+    public function test_unlocalized_parent_is_an_entry_without_inventing_an_alternate(): void {
         $router = new Router();
         $root = $router->get('/page', [DummyController::class, 'action'])->sitemap()
             ->localize('en_GB', '/en/page');
         $entries = $router->getSitemapEntries();
         self::assertEqualsCanonicalizing(
             ['/page', '/en/page'],
-            array_map(static fn(SitemapEntry $entry): string => $entry->route->getReadable(), $entries),
+            array_map(static fn (SitemapEntry $entry): string => $entry->route->getReadable(), $entries),
         );
         foreach ($entries as $entry) {
             self::assertSame(['en-gb' => $root->getRouteForLocale('en_GB')], $entry->alternates);
         }
     }
 
-    public function testUnregisteredTranslationIsRemovedFromEveryAlternateMap(): void
-    {
+    public function test_unregistered_translation_is_removed_from_every_alternate_map(): void {
         $router = new Router();
         $root = $router->get('/page', [DummyController::class, 'action'])->sitemap()
             ->localize('cs')->localize('en', '/en/page')->localize('de', '/de/page');
@@ -201,15 +191,14 @@ final class SitemapTest extends TestCase
         $entries = $router->getSitemapEntries();
         self::assertSame(
             ['/page', '/de/page'],
-            array_map(static fn(SitemapEntry $entry): string => $entry->route->getReadable(), $entries),
+            array_map(static fn (SitemapEntry $entry): string => $entry->route->getReadable(), $entries),
         );
         foreach ($entries as $entry) {
             self::assertSame(['cs' => $root, 'de' => $root->getRouteForLocale('de')], $entry->alternates);
         }
     }
 
-    public function testNormalizedLocaleCollisionCannotSilentlyReplaceAnAlternate(): void
-    {
+    public function test_normalized_locale_collision_cannot_silently_replace_an_alternate(): void {
         $router = new Router();
         $router->get('/page', [DummyController::class, 'action'])->sitemap()
             ->localize('en_US')->localize('en-us', '/other-page');
@@ -217,8 +206,7 @@ final class SitemapTest extends TestCase
         $router->getSitemapEntries();
     }
 
-    public function testMetadataSnapshotsDetachCallerReferencesAndLaterDeclarations(): void
-    {
+    public function test_metadata_snapshots_detach_caller_references_and_later_declarations(): void {
         $router = new Router();
         $value = 'original';
         $nested = ['value' => &$value];
@@ -233,8 +221,7 @@ final class SitemapTest extends TestCase
         self::assertSame(['nested' => ['value' => 'new declaration']], $route->getMeta());
     }
 
-    public function testUnregisterAndFailedDuplicateRegistrationDoNotLeavePhantomRoutes(): void
-    {
+    public function test_unregister_and_failed_duplicate_registration_do_not_leave_phantom_routes(): void {
         $router = new Router(sitemapDefaultIncluded: true);
         $root = $router->get('/page', [DummyController::class, 'action'])
             ->localize('en', '/en/page')->redirectFrom('/old');
@@ -255,15 +242,13 @@ final class SitemapTest extends TestCase
     }
 
     #[DataProvider('invalidDeclarations')]
-    public function testInvalidDeclarationsAreRejected(string $method, mixed $value): void
-    {
+    public function test_invalid_declarations_are_rejected(string $method, mixed $value): void {
         $route = (new Router())->get('/page', [DummyController::class, 'action']);
         $this->expectException(InvalidArgumentException::class);
         $route->{$method}($value);
     }
 
-    public static function invalidDeclarations(): iterable
-    {
+    public static function invalidDeclarations(): iterable {
         yield 'negative priority' => ['priority', -0.1];
         yield 'priority above one' => ['priority', 1.1];
         yield 'non finite priority' => ['priority', INF];
@@ -275,15 +260,14 @@ final class SitemapTest extends TestCase
         yield 'nested object' => ['meta', ['nested' => ['object' => new stdClass()]]];
     }
 
-    public function testMetadataRejectsClosuresResourcesAndCycles(): void
-    {
+    public function test_metadata_rejects_closures_resources_and_cycles(): void {
         $route = (new Router())->get('/page', [DummyController::class, 'action']);
         $resource = fopen('php://memory', 'r+');
         self::assertIsResource($resource);
         $cyclic = [];
         $cyclic['self'] = &$cyclic;
         try {
-            foreach ([['callback' => static fn() => null], ['stream' => $resource], ['nested' => $cyclic]] as $metadata) {
+            foreach ([['callback' => static fn () => null], ['stream' => $resource], ['nested' => $cyclic]] as $metadata) {
                 try {
                     $route->meta($metadata);
                     self::fail('Non-cacheable metadata must be rejected.');
@@ -297,13 +281,12 @@ final class SitemapTest extends TestCase
         }
     }
 
-    public function testAttributesApplyToEveryMethodRouteAndExclusionWins(): void
-    {
+    public function test_attributes_apply_to_every_method_route_and_exclusion_wins(): void {
         $router = new Router(controllers: [ROOT . 'src/SitemapController.php'], sitemapDefaultIncluded: true);
         $router->setup();
         self::assertEqualsCanonicalizing(
             ['/attribute/one', '/attribute/two'],
-            array_map(static fn(Route $route): string => $route->getReadable(), $router->getSitemapRoutes('articles')),
+            array_map(static fn (Route $route): string => $route->getReadable(), $router->getSitemapRoutes('articles')),
         );
         self::assertSame([], $router->getSitemapRoutes('excluded'));
         self::assertSame(['articles'], $router->getSitemapNames());
