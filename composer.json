@@ -2,7 +2,7 @@
   "name": "lsr/routing",
   "license": "MIT",
   "description": "Laser framework core - Routing.",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "repositories": [
     {
       "type": "composer",
