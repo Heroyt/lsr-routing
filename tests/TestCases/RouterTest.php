@@ -190,7 +190,7 @@ class RouterTest extends TestCase
         self::assertNotEmpty($namedRoutes['delete-loaded']);
     }
 
-    #[Depends('testLoadRoutes')]
+    #[Depends('test_load_routes')]
     public function test_load_validated_routes(): void {
         self::assertNotEmpty(Router::$availableRoutes['validated']);
         self::assertNotEmpty(Router::$availableRoutes['validated']['[lang=cs]']);
@@ -221,7 +221,7 @@ class RouterTest extends TestCase
      *
      * @return void
      */
-    #[Depends('testLoadRoutes')] #[DataProvider('getRoutes')]
+    #[Depends('test_load_routes')] #[DataProvider('getRoutes')]
     public function test_get_route(RouteInterface $route, RequestMethod $method, array $path, array $expectedParams, bool $expected): void {
         $params = [];
         $routeGot = Router::getRoute($method, $path, $params);
@@ -698,7 +698,7 @@ class RouterTest extends TestCase
         $router->unregisterAll();
     }
 
-    #[Depends('testLoadValidatedRoutes')]
+    #[Depends('test_load_validated_routes')]
     public function test_validated_optional_routes(): void {
         $method = RequestMethod::GET;
 
@@ -753,7 +753,7 @@ class RouterTest extends TestCase
         }
     }
 
-    #[Depends('testLoadValidatedRoutes')]
+    #[Depends('test_load_validated_routes')]
     public function test_validated_required_routes(): void {
         $method = RequestMethod::GET;
 

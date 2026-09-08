@@ -440,7 +440,7 @@ class RouteTest extends TestCase
         ];
     }
 
-    #[Depends('testCompare')] #[DataProvider('getRoutes')]
+    #[Depends('test_compare')] #[DataProvider('getRoutes')]
     public function test_get(string $route, array $routeArray): void {
         $routeObj = $this->router->get($route, [$this, 'dummyRouteCallback']);
 
@@ -451,7 +451,7 @@ class RouteTest extends TestCase
      * @param string   $route
      * @param string[] $routeArray
      */
-    #[DataProvider('getRoutes')] #[Depends('testCompare')]
+    #[DataProvider('getRoutes')] #[Depends('test_compare')]
     public function test_update(string $route, array $routeArray): void {
         $routeObj = $this->router->update($route, [$this, 'dummyRouteCallback']);
 
@@ -463,7 +463,7 @@ class RouteTest extends TestCase
      * @param string        $route
      * @param string[]      $routeArray
      */
-    #[Depends('testCompare'), DataProvider('getCreateRoutes')]
+    #[Depends('test_compare'), DataProvider('getCreateRoutes')]
     public function test_create(RequestMethod $method, string $route, array $routeArray, $callback): void {
         $routeObj = $this->router->route($method, $route, $callback);
 
@@ -482,7 +482,7 @@ class RouteTest extends TestCase
      *
      * @return void
      */
-    #[Depends('testCompare')] #[DataProvider('getCreateRoutesDuplicates')]
+    #[Depends('test_compare')] #[DataProvider('getCreateRoutesDuplicates')]
     public function test_create_duplicate(RequestMethod $method, string $route, array $routeArray): void {
         $routeObj = $this->router->route($method, $route, static function (): void {
             echo 'Hello!';
@@ -505,20 +505,20 @@ class RouteTest extends TestCase
      *
      * @return void
      */
-    #[Depends('testCompare')] #[DataProvider('getRoutes')]
+    #[Depends('test_compare')] #[DataProvider('getRoutes')]
     public function test_post(string $route, array $routeArray): void {
         $routeObj = $this->router->post($route, [$this, 'dummyRouteCallback']);
 
         self::assertTrue($routeObj->compare($this->router::getRoute(RequestMethod::POST, $routeArray)));
     }
 
-    #[Depends('testCreate')] #[DataProvider('getRoutesNames')]
+    #[Depends('test_create')] #[DataProvider('getRoutesNames')]
     public function test_name(RequestMethod $method, string $route, string $name): void {
         $route = $this->router->route($method, $route, [$this, 'dummyRouteCallback'])->name($name);
         self::assertTrue($route->compare($this->router->getRouteByName($name)));
     }
 
-    #[Depends('testCreate')]
+    #[Depends('test_create')]
     #[DataProvider('getRoutesNamesDuplicates')]
     public function test_name_duplicate(string $name, RequestMethod $method1, string $route1, array|callable $callback1, RequestMethod $method2, string $route2, array|callable $callback2): void {
         $route = $this->router->route($method1, $route1, $callback1)->name($name);
@@ -538,7 +538,7 @@ class RouteTest extends TestCase
     /**
      * @param string[] $routeArray
      */
-    #[Depends('testCompare')] #[DataProvider('getRoutes')]
+    #[Depends('test_compare')] #[DataProvider('getRoutes')]
     public function test_put(string $route, array $routeArray): void {
         $routeObj = $this->router->put($route, [$this, 'dummyRouteCallback']);
 
@@ -551,7 +551,7 @@ class RouteTest extends TestCase
      *
      * @return void
      */
-    #[Depends('testCompare')] #[DataProvider('getRoutes')]
+    #[Depends('test_compare')] #[DataProvider('getRoutes')]
     public function test_delete(string $route, array $routeArray): void {
         $routeObj = $this->router->delete($route, [$this, 'dummyRouteCallback']);
 
@@ -559,7 +559,7 @@ class RouteTest extends TestCase
 
     }
 
-    #[Depends('testCompareRoutePaths')] #[DataProvider('getRoutesToCompare')]
+    #[Depends('test_compare_route_paths')] #[DataProvider('getRoutesToCompare')]
     public function test_compare(RouteInterface $route1, RouteInterface $route2, bool $same): void {
         self::assertSame(
             $same,

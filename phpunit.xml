@@ -16,7 +16,6 @@
   <source>
     <include>
       <directory>./src</directory>
-      <directory>./build</directory>
     </include>
   </source>
 </phpunit>

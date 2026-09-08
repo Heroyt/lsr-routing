@@ -41,6 +41,26 @@ final class MiddlewareGroupTest extends TestCase
         );
     }
 
+    public function test_named_variadic_entries_do_not_overwrite_inherited_dependencies(): void {
+        $router = new Router();
+        $first = new NamedMiddleware('first');
+        $second = new NamedMiddleware('second');
+        $firstValidator = new NamedValidator('first');
+        $secondValidator = new NamedValidator('second');
+        $router->group('/named-variadic')
+            ->middlewareAll(entry: $first)
+            ->middlewareAll(entry: $second)
+            ->paramAll('id', validator: $firstValidator)
+            ->paramAll('id', validator: $secondValidator)
+            ->get('/{id}', static fn () => null)
+            ->name('named-variadic');
+
+        $route = $router->getRouteByName('named-variadic');
+        self::assertNotNull($route);
+        self::assertSame([$first, $second], $route->getMiddleware());
+        self::assertSame([$firstValidator, $secondValidator], $route->paramValidators['id']);
+    }
+
     public function test_route_deduplicates_the_same_middleware_instance(): void {
         $router = new Router();
         $middleware = new NamedMiddleware('same');

@@ -89,6 +89,22 @@ final class CompiledRouteCacheTest extends TestCase
         self::assertSame([$validator], $route->paramValidators['id']);
     }
 
+    public function test_malformed_cached_middleware_does_not_replace_live_routes(): void {
+        $source = ROOT . 'routes/compiled-routes.php';
+        $cacheFile = $this->temporaryFile('malformed.php');
+        $cache = new CompiledRouteCache($cacheFile, routeSources: [$source]);
+        $router = new Router([$source], compiledRouteCache: $cache);
+        $router->setup();
+        $liveRoutes = $router->getAvailableRoutes();
+
+        $data = require $cacheFile;
+        $data['routes'][0]['middleware'] = 'not-an-array';
+        file_put_contents($cacheFile, '<?php return ' . var_export($data, true) . ';');
+
+        self::assertFalse($cache->load($router));
+        self::assertSame($liveRoutes, $router->getAvailableRoutes());
+    }
+
     public function test_timestamp_checking_detects_new_route_files(): void {
         $directory = $this->temporaryDirectory();
         $cacheFile = $directory . '/routes.php.cache';
